@@ -1,0 +1,32 @@
+{
+  "name": "lead-management-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "dev": "node scripts/dev-clean.mjs && next dev -p 3000",
+    "dev:quick": "echo 'WARNING: dev:quick skips cache clean and may cause 500 errors. Use yarn dev instead.' && next dev -p 3000",
+    "postinstall": "node -e \"const fs=require('fs');const p='node_modules/d3-shape/src/curve/basis.js';if(!fs.existsSync(p)){console.error('Broken install — re-run yarn install');process.exit(1)}\"",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "verify": "node scripts/dev-clean.mjs && next build"
+  },
+  "dependencies": {
+    "next": "15.5.19",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "recharts": "2.15.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2"
+  }
+}

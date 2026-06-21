@@ -1,0 +1,11 @@
+.env
+node_modules/
+package-lock.json
+__pycache__/
+*.pyc
+.next/
+dist/
+*.egg-info/
+.DS_Store
+.venv/
+backend/.venv/

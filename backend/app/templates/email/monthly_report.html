@@ -1,0 +1,9 @@
+<h2>Monthly Lead Report — {{ month }}</h2>
+<p>Hello {{ manager_name }},</p>
+<p>Summary of lead outcomes for the month:</p>
+<ul>
+{% for outcome, count in outcomes.items() %}
+  <li>{{ outcome | replace('_', ' ') | title }}: {{ count }}</li>
+{% endfor %}
+</ul>
+<p>Profile health: {{ profile_health.linkedin_verified }}/{{ profile_health.total }} LinkedIn verified.</p>

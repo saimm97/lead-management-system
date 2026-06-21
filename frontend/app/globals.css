@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --muted: #64748b;
+    --accent: #4f46e5;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
+  }
+
+  * {
+    @apply border-slate-200;
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply mx-auto max-w-[1600px] space-y-6 p-6 lg:p-8;
+  }
+
+  .data-table th {
+    @apply whitespace-nowrap px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+  }
+
+  .data-table td {
+    @apply px-4 py-3.5 text-sm text-slate-700;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-slate-100 transition-colors hover:bg-slate-50/80;
+  }
+
+  .input-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+}
