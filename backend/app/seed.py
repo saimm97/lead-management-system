@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
@@ -45,6 +45,14 @@ DROPDOWN_SEED = {
         "Client Round",
         "Manager Round",
         "System Design",
+    ],
+    "lead_issue_type": [
+        "No Show",
+        "Onsite Lead",
+        "JD Mismatch",
+        "Fake Company",
+        "Drugs Lead",
+        "Betting App Lead",
     ],
 }
 
@@ -176,4 +184,19 @@ async def seed_database():
         for eng in engineers.scalars().all():
             if not eng.devsinc_id:
                 eng.devsinc_id = eng.employee_id
+        await db.commit()
+
+    async with AsyncSessionLocal() as db:
+        for category, labels in DROPDOWN_SEED.items():
+            existing = await db.execute(
+                select(LeadDropdownOption).where(LeadDropdownOption.category == category).limit(1)
+            )
+            if existing.scalar_one_or_none():
+                continue
+            max_order = (
+                await db.execute(select(func.max(LeadDropdownOption.sort_order)))
+            ).scalar() or 0
+            for label in labels:
+                max_order += 1
+                db.add(LeadDropdownOption(category=category, label=label, sort_order=max_order))
         await db.commit()

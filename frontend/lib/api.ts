@@ -58,20 +58,29 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   return res.json();
 }
 
-export function downloadTemplate(entity: "leads" | "profiles" | "users") {
+/** Download a file from an authenticated API endpoint (uses the server-provided filename when present). */
+export async function downloadApiFile(path: string, fallbackFilename: string) {
   const token = getToken();
-  const url = `${API_URL}/api/admin/import/template/${entity}`;
-  fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-    .then((res) => {
-      if (!res.ok) throw new Error("Download failed");
-      return res.blob();
-    })
-    .then((blob) => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${entity}_template.xlsx`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    })
-    .catch(() => alert("Failed to download template"));
+  const res = await fetch(`${API_URL}/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error("Download failed");
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function downloadTemplate(entity: "leads" | "profiles" | "users") {
+  downloadApiFile(`/admin/import/template/${entity}`, `${entity}_template.xlsx`).catch(() =>
+    alert("Failed to download template")
+  );
 }

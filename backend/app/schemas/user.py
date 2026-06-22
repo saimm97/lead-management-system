@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -35,6 +35,54 @@ class BDRegisterRequest(BaseModel):
     password: str = Field(min_length=6)
     full_name: str
     employee_id: str
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6)
+    full_name: str
+    employee_id: str
+    role: UserRole
+    devsinc_id: str | None = None
+    # "email" → confirm via emailed link (auto-activates); "approval" → admin approval.
+    method: Literal["email", "approval"] = "approval"
+
+
+class RegisterResult(BaseModel):
+    status: Literal["pending_confirmation", "pending_approval"]
+    message: str
+    # Surfaced only when SMTP is not configured, so dev can still complete the flow.
+    confirmation_url: str | None = None
+
+
+class ApprovalActionRequest(BaseModel):
+    comment: str | None = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=6)
+
+
+class TokenValidation(BaseModel):
+    valid: bool
+    email: str | None = None
+
+
+class PasswordResetRequestResponse(BaseModel):
+    id: int
+    user_id: int
+    email: str
+    full_name: str | None = None
+    role: str | None = None
+    status: ApprovalStatus
+    admin_comment: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class AcceptInviteRequest(BaseModel):
@@ -94,7 +142,10 @@ class UserResponse(BaseModel):
     tenant_id: int | None = None
     is_active: bool
     approval_status: ApprovalStatus
+    approval_comment: str | None = None
+    team_lead_name: str | None = None
     must_reset_password: bool = False
+    has_subordinates: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

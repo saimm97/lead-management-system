@@ -8,6 +8,7 @@ import {
   Target,
   AlertCircle,
   BarChart3,
+  CalendarDays,
   Settings,
   LogOut,
   Briefcase,
@@ -44,6 +45,7 @@ const mainNav: NavItem[] = [
     ],
   },
   { href: "/issues", label: "Issues", icon: AlertCircle, roles: ["admin", "manager", "bd", "engineer"] },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, roles: ["admin", "manager", "bd"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["admin", "manager"] },
 ];
 
@@ -149,7 +151,13 @@ export function Sidebar({ user }: { user: User }) {
       </nav>
 
       <div className="border-t border-slate-800 p-4">
-        <div className="mb-3 flex items-center gap-3 rounded-lg bg-slate-900/80 p-3">
+        <Link
+          href="/profile"
+          className={cn(
+            "mb-3 flex items-center gap-3 rounded-lg p-3 transition hover:bg-slate-900",
+            pathname === "/profile" ? "bg-slate-900" : "bg-slate-900/80"
+          )}
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold">
             {user.full_name.charAt(0)}
           </div>
@@ -160,7 +168,8 @@ export function Sidebar({ user }: { user: User }) {
               {user.role.replace("_", " ")}
             </p>
           </div>
-        </div>
+          <Settings className="h-4 w-4 shrink-0 text-slate-500" />
+        </Link>
         <Button variant="ghost" className="w-full justify-start gap-2 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={logout}>
           <LogOut className="h-4 w-4" /> Sign out
         </Button>

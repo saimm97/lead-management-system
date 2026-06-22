@@ -6,14 +6,25 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.enums import ApprovalStatus, ManagerType, UserRole
 from app.core.security import hash_password
+from app.models.auth_token import AuthToken, PasswordResetRequest
 from app.models.user import User, UserInvitation
 from app.schemas.bulk import BulkUpdateRequest, BulkUpdateResult
-from app.schemas.user import AdminPasswordReset, UserCreate, UserInviteCreate, UserResponse, UserUpdate
+from app.schemas.user import (
+    AdminPasswordReset,
+    ApprovalActionRequest,
+    PasswordResetRequestResponse,
+    UserCreate,
+    UserInviteCreate,
+    UserResponse,
+    UserUpdate,
+)
 from app.services.audit import log_audit
 from app.services.bulk_update import bulk_update_users
+from app.services.email import link_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -200,6 +211,7 @@ async def pending_approvals(
 @router.post("/{user_id}/approve", response_model=UserResponse)
 async def approve_user(
     user_id: int,
+    data: ApprovalActionRequest | None = None,
     user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -208,7 +220,9 @@ async def approve_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     target.approval_status = ApprovalStatus.APPROVED
-    await log_audit(db, user.id, "approve", "user", user_id)
+    if data and data.comment is not None:
+        target.approval_comment = data.comment
+    await log_audit(db, user.id, "approve", "user", user_id, details=(data.comment if data else None))
     await db.commit()
     await db.refresh(target)
     return target
@@ -217,6 +231,7 @@ async def approve_user(
 @router.post("/{user_id}/reject", response_model=UserResponse)
 async def reject_user(
     user_id: int,
+    data: ApprovalActionRequest | None = None,
     user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -225,10 +240,116 @@ async def reject_user(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     target.approval_status = ApprovalStatus.REJECTED
-    await log_audit(db, user.id, "reject", "user", user_id)
+    if data and data.comment is not None:
+        target.approval_comment = data.comment
+    await log_audit(db, user.id, "reject", "user", user_id, details=(data.comment if data else None))
     await db.commit()
     await db.refresh(target)
     return target
+
+
+@router.get("/password-reset-requests", response_model=list[PasswordResetRequestResponse])
+async def list_password_reset_requests(
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(PasswordResetRequest)
+        .where(PasswordResetRequest.status == ApprovalStatus.PENDING)
+        .order_by(PasswordResetRequest.created_at.desc())
+    )
+    requests = result.scalars().all()
+    out: list[PasswordResetRequestResponse] = []
+    for req in requests:
+        target = (await db.execute(select(User).where(User.id == req.user_id))).scalar_one_or_none()
+        out.append(PasswordResetRequestResponse(
+            id=req.id,
+            user_id=req.user_id,
+            email=req.email,
+            full_name=target.full_name if target else None,
+            role=target.role.value if target else None,
+            status=req.status,
+            admin_comment=req.admin_comment,
+            created_at=req.created_at,
+        ))
+    return out
+
+
+@router.post("/password-reset-requests/{request_id}/approve")
+async def approve_password_reset(
+    request_id: int,
+    data: ApprovalActionRequest | None = None,
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    req = (await db.execute(select(PasswordResetRequest).where(PasswordResetRequest.id == request_id))).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Reset request not found")
+    if req.status != ApprovalStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Request already resolved")
+    target = (await db.execute(select(User).where(User.id == req.user_id))).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token = secrets.token_urlsafe(32)
+    db.add(AuthToken(
+        user_id=target.id,
+        purpose="password_reset",
+        token=token,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+    ))
+    req.status = ApprovalStatus.APPROVED
+    req.resolved_by_id = user.id
+    req.resolved_at = datetime.now(timezone.utc)
+    if data and data.comment is not None:
+        req.admin_comment = data.comment
+    await log_audit(db, user.id, "approve_reset", "password_reset_request", request_id)
+    await db.commit()
+
+    reset_url = f"{settings.frontend_url}/reset-password/{token}"
+    sent = await send_email(
+        target.email,
+        "Your LeadPro password reset was approved",
+        link_email(
+            "Reset your password",
+            f"Hi {target.full_name}, your password reset request was approved. "
+            "Click below to choose a new password. This link expires in 24 hours.",
+            "Set a new password",
+            reset_url,
+        ),
+    )
+    return {"message": "Reset request approved.", "reset_url": None if sent else reset_url}
+
+
+@router.post("/password-reset-requests/{request_id}/reject")
+async def reject_password_reset(
+    request_id: int,
+    data: ApprovalActionRequest | None = None,
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    req = (await db.execute(select(PasswordResetRequest).where(PasswordResetRequest.id == request_id))).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Reset request not found")
+    if req.status != ApprovalStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Request already resolved")
+    target = (await db.execute(select(User).where(User.id == req.user_id))).scalar_one_or_none()
+    req.status = ApprovalStatus.REJECTED
+    req.resolved_by_id = user.id
+    req.resolved_at = datetime.now(timezone.utc)
+    if data and data.comment is not None:
+        req.admin_comment = data.comment
+    await log_audit(db, user.id, "reject_reset", "password_reset_request", request_id)
+    await db.commit()
+    if target:
+        note = f" Note: {data.comment}" if data and data.comment else ""
+        await send_email(
+            target.email,
+            "Your LeadPro password reset request",
+            f"<p>Hi {target.full_name}, your password reset request was not approved.{note} "
+            "Please contact your administrator if you need help.</p>",
+        )
+    return {"message": "Reset request rejected."}
 
 
 @router.post("/invite", status_code=status.HTTP_201_CREATED)

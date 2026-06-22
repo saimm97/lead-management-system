@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Profile } from "@/lib/types";
 import { PageHeader } from "@/components/PageHeader";
-import { Badge, Button, Card, Input, DataTable, FormField, Spinner, RecordIdCell, RecordIdHeader } from "@/components/ui";
+import { Badge, Button, Card, Input, FormField, Spinner } from "@/components/ui";
+import { SortableTable, TableColumn } from "@/components/SortableTable";
+import { COL_MIN } from "@/lib/tableUtils";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+
+type LinkedLead = { id: number; company: string; job_title: string; status: string };
 
 export default function ProfileDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [leads, setLeads] = useState<{ id: number; company: string; job_title: string; status: string }[]>([]);
+  const [leads, setLeads] = useState<LinkedLead[]>([]);
   const [edit, setEdit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ full_name: "", linkedin_url: "", github_url: "", primary_tech_stack: "" });
@@ -34,11 +38,18 @@ export default function ProfileDetailPage() {
   const save = async () => { await api(`/profiles/${id}`, { method: "PATCH", body: JSON.stringify(form) }); setEdit(false); load(); };
   const verify = async () => { await api(`/profiles/${id}/verify-linkedin`, { method: "PATCH" }); load(); };
 
+  const leadColumns = useMemo<TableColumn<LinkedLead>[]>(() => [
+    { id: "id", label: "ID", minWidth: COL_MIN.id, getSortValue: (l) => l.id, className: "text-center font-medium tabular-nums text-slate-500", render: (l) => l.id },
+    { id: "job_title", label: "Job Title", minWidth: COL_MIN.lg, getSortValue: (l) => l.job_title, render: (l) => <Link href={`/leads/${l.id}`} className="font-medium text-brand-600 hover:text-brand-700">{l.job_title}</Link> },
+    { id: "company", label: "Company", minWidth: COL_MIN.md, getSortValue: (l) => l.company, className: "text-slate-600", render: (l) => l.company },
+    { id: "status", label: "Status", minWidth: COL_MIN.sm, getSortValue: (l) => l.status, render: (l) => <Badge variant="blue">{l.status}</Badge> },
+  ], []);
+
   if (loading) return <div className="flex justify-center py-24"><Spinner /></div>;
   if (!profile) return <p className="text-red-600">Profile not found.</p>;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <Link href="/profiles" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700">
         <ArrowLeft className="h-4 w-4" /> Back to Profiles
       </Link>
@@ -100,28 +111,7 @@ export default function ProfileDetailPage() {
 
       <div>
         <h3 className="mb-3 font-semibold text-slate-900">Linked Leads ({leads.length})</h3>
-        {leads.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-500">No leads linked to this profile.</div>
-        ) : (
-          <DataTable>
-            <thead className="border-b border-slate-200 bg-slate-50/80">
-              <tr>
-                <RecordIdHeader />
-                {["Job Title", "Company", "Status"].map((h) => <th key={h}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((l) => (
-                <tr key={l.id}>
-                  <RecordIdCell value={l.id} />
-                  <td><Link href={`/leads/${l.id}`} className="font-medium text-brand-600 hover:text-brand-700">{l.job_title}</Link></td>
-                  <td className="text-slate-600">{l.company}</td>
-                  <td><Badge variant="blue">{l.status}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
-        )}
+        <SortableTable storageKey="profile-linked-leads" columns={leadColumns} data={leads} emptyMessage="No leads linked to this profile." />
       </div>
     </div>
   );

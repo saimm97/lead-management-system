@@ -72,11 +72,14 @@ async def list_issues(
     status: str | None = None,
     priority: str | None = None,
     category: str | None = None,
+    related_lead_id: int | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Issue).options(selectinload(Issue.comments))
-    if scope == "my":
+    if related_lead_id is not None:
+        query = query.where(Issue.related_lead_id == related_lead_id)
+    elif scope == "my":
         query = query.where(Issue.reported_by_id == user.id)
     elif scope == "team":
         if user.role not in (UserRole.ADMIN, UserRole.MANAGER):

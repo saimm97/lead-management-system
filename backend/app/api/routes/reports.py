@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -174,6 +174,96 @@ async def monthly_report(
         profile_health={"total": total_profiles, "linkedin_verified": verified, "github_present": github},
         issues_summary={"open": open_issues, "resolved": resolved},
     )
+
+
+@router.get("/resource-leads")
+async def resource_leads(
+    role: str = Query("all", pattern="^(all|engineer|bd)$"),
+    search: str | None = None,
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every BD and Engineer resource with their team lead and assigned-lead count."""
+    eng_counts = dict(
+        (await db.execute(
+            select(Lead.assigned_engineer_id, func.count())
+            .where(Lead.assigned_engineer_id.isnot(None))
+            .group_by(Lead.assigned_engineer_id)
+        )).all()
+    )
+    bd_counts = dict(
+        (await db.execute(
+            select(Lead.bd_id, func.count())
+            .where(Lead.bd_id.isnot(None))
+            .group_by(Lead.bd_id)
+        )).all()
+    )
+
+    roles = [UserRole.ENGINEER, UserRole.BD]
+    if role == "engineer":
+        roles = [UserRole.ENGINEER]
+    elif role == "bd":
+        roles = [UserRole.BD]
+    query = select(User).where(User.role.in_(roles))
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(or_(User.full_name.ilike(pattern), User.email.ilike(pattern)))
+    query = query.order_by(User.role, User.full_name)
+    users = (await db.execute(query)).scalars().all()
+
+    out = []
+    for u in users:
+        count = eng_counts.get(u.id, 0) if u.role == UserRole.ENGINEER else bd_counts.get(u.id, 0)
+        out.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "role": u.role.value,
+            "devsinc_id": u.devsinc_id,
+            "team_lead_name": u.team_lead_name,
+            "lead_count": count,
+        })
+    return out
+
+
+@router.get("/resource-leads/{user_id}")
+async def resource_lead_names(
+    user_id: int,
+    limit: int = Query(500, ge=1, le=2000),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """The lead names (company / job title) assigned to a single resource."""
+    target = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not target:
+        return {"resource": None, "total": 0, "leads": []}
+    if target.role == UserRole.BD:
+        condition = Lead.bd_id == user_id
+    else:
+        condition = Lead.assigned_engineer_id == user_id
+    total = (await db.execute(select(func.count()).select_from(Lead).where(condition))).scalar() or 0
+    rows = (await db.execute(
+        select(Lead).where(condition).order_by(Lead.created_at.desc()).limit(limit)
+    )).scalars().all()
+    return {
+        "resource": {
+            "id": target.id,
+            "full_name": target.full_name,
+            "role": target.role.value,
+            "team_lead_name": target.team_lead_name,
+        },
+        "total": total,
+        "leads": [
+            {
+                "id": l.id,
+                "company": l.company,
+                "job_title": l.job_title,
+                "phase": l.phase,
+                "status": l.status,
+            }
+            for l in rows
+        ],
+    }
 
 
 @router.post("/generate")

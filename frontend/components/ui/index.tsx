@@ -188,9 +188,9 @@ export function Spinner({ className }: { className?: string }) {
 
 export function DataTable({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-card", className)}>
-      <div className="overflow-x-auto">
-        <table className="data-table min-w-full">{children}</table>
+    <div className={cn("w-full overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-card", className)}>
+      <div className="table-scroll">
+        <table className="data-table">{children}</table>
       </div>
     </div>
   );

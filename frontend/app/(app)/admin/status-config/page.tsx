@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
-import { Button, Card, Input, DataTable, FormField, Badge, RecordIdCell, RecordIdHeader } from "@/components/ui";
+import { Button, Card, Input, FormField, Badge } from "@/components/ui";
+import { SortableTable, TableColumn } from "@/components/SortableTable";
+import { COL_MIN } from "@/lib/tableUtils";
 
 interface StatusConfig {
   id: number;
@@ -18,6 +20,16 @@ interface StatusConfig {
 export default function StatusConfigPage() {
   const [configs, setConfigs] = useState<StatusConfig[]>([]);
   const [form, setForm] = useState({ phase: "", type: "", status: "", is_terminal: false, report_bucket: "", sort_order: 0 });
+
+  const columns = useMemo<TableColumn<StatusConfig>[]>(() => [
+    { id: "id", label: "ID", minWidth: COL_MIN.id, getSortValue: (c) => c.id, className: "text-center font-medium tabular-nums text-slate-500", render: (c) => c.id },
+    { id: "phase", label: "Phase", minWidth: COL_MIN.sm, getSortValue: (c) => c.phase, render: (c) => <Badge variant="blue">{c.phase}</Badge> },
+    { id: "type", label: "Type", minWidth: COL_MIN.md, getSortValue: (c) => c.type, className: "text-slate-600", render: (c) => c.type },
+    { id: "status", label: "Status", minWidth: COL_MIN.lg, getSortValue: (c) => c.status, className: "font-medium text-slate-900", render: (c) => c.status },
+    { id: "terminal", label: "Terminal", minWidth: COL_MIN.sm, getSortValue: (c) => (c.is_terminal ? 1 : 0), render: (c) => <Badge variant={c.is_terminal ? "red" : "default"}>{c.is_terminal ? "Yes" : "No"}</Badge> },
+    { id: "report_bucket", label: "Report Bucket", minWidth: COL_MIN.md, getSortValue: (c) => c.report_bucket || "", className: "text-slate-500", render: (c) => c.report_bucket || "—" },
+    { id: "sort_order", label: "Order", minWidth: COL_MIN.sm, getSortValue: (c) => c.sort_order, className: "text-slate-500", render: (c) => c.sort_order },
+  ], []);
 
   const load = () => api<StatusConfig[]>("/admin/status-config").then(setConfigs);
   useEffect(() => { load(); }, []);
@@ -49,27 +61,7 @@ export default function StatusConfigPage() {
           <div className="flex items-end"><Button type="submit">Add Status</Button></div>
         </form>
       </Card>
-      <DataTable>
-        <thead className="border-b border-slate-200 bg-slate-50/80">
-          <tr>
-            <RecordIdHeader />
-            {["Phase", "Type", "Status", "Terminal", "Report Bucket", "Order"].map((h) => <th key={h}>{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {configs.map((c) => (
-            <tr key={c.id}>
-              <RecordIdCell value={c.id} />
-              <td><Badge variant="blue">{c.phase}</Badge></td>
-              <td className="text-slate-600">{c.type}</td>
-              <td className="font-medium text-slate-900">{c.status}</td>
-              <td><Badge variant={c.is_terminal ? "red" : "default"}>{c.is_terminal ? "Yes" : "No"}</Badge></td>
-              <td className="text-slate-500">{c.report_bucket || "—"}</td>
-              <td className="text-slate-500">{c.sort_order}</td>
-            </tr>
-          ))}
-        </tbody>
-      </DataTable>
+      <SortableTable storageKey="admin-status-config" columns={columns} data={configs} emptyMessage="No status configurations yet." />
     </div>
   );
 }

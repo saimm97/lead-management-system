@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { User, UserRole } from "@/lib/types";
+import { User, UserRole, PasswordResetRequest } from "@/lib/types";
 import { PageHeader } from "@/components/PageHeader";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
-import { Badge, Button, DataTable, Input, Select, Modal, FormField, Tabs, EmptyState, RecordIdCell, RecordIdHeader } from "@/components/ui";
-import { UserPlus, Mail, Pencil, KeyRound, UserX, Filter } from "lucide-react";
+import { Badge, Button, Input, Select, Modal, FormField, Tabs, EmptyState } from "@/components/ui";
+import { AdminUsersTable, AdminInvitationsTable } from "@/components/AdminUsersTable";
+import { exportCsv } from "@/lib/csv";
+import { UserPlus, Mail, Filter, Download } from "lucide-react";
 
-type Tab = "active" | "pending" | "invitations";
+type Tab = "active" | "pending" | "invitations" | "resets";
 
 const ROLES: UserRole[] = ["admin", "manager", "bd", "engineer"];
 
@@ -27,6 +29,9 @@ export default function AdminUsersPage() {
   const [inviteForm, setInviteForm] = useState({ email: "", role: "engineer" as UserRole });
   const [editForm, setEditForm] = useState({ full_name: "", email: "", employee_id: "", role: "engineer" as UserRole, devsinc_id: "", is_active: true, manager_id: "" });
   const [resetPassword, setResetPassword] = useState("");
+  const [approvalComments, setApprovalComments] = useState<Record<number, string>>({});
+  const [resetRequests, setResetRequests] = useState<PasswordResetRequest[]>([]);
+  const [resetComments, setResetComments] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
 
   const load = () => {
@@ -37,6 +42,27 @@ export default function AdminUsersPage() {
     api<User[]>(`/users${q}`).then(setUsers);
     api<User[]>("/users/pending-approvals").then(setPending);
     api<typeof invitations>("/users/invitations").then(setInvitations);
+    api<PasswordResetRequest[]>("/users/password-reset-requests").then(setResetRequests).catch(() => setResetRequests([]));
+  };
+
+  const approveReset = async (id: number) => {
+    const res = await api<{ message: string; reset_url: string | null }>(`/users/password-reset-requests/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ comment: resetComments[id] || null }),
+    });
+    if (res.reset_url) {
+      window.prompt("Email isn't configured — share this reset link with the user:", res.reset_url);
+    }
+    setResetComments((c) => ({ ...c, [id]: "" }));
+    load();
+  };
+  const rejectReset = async (id: number) => {
+    await api(`/users/password-reset-requests/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ comment: resetComments[id] || null }),
+    });
+    setResetComments((c) => ({ ...c, [id]: "" }));
+    load();
   };
 
   useEffect(() => { load(); }, [filters]);
@@ -55,8 +81,17 @@ export default function AdminUsersPage() {
     setError("");
   };
 
-  const approve = async (id: number) => { await api(`/users/${id}/approve`, { method: "POST" }); load(); };
-  const reject = async (id: number) => { await api(`/users/${id}/reject`, { method: "POST" }); load(); };
+  const setComment = (id: number, v: string) => setApprovalComments((c) => ({ ...c, [id]: v }));
+  const approve = async (id: number) => {
+    await api(`/users/${id}/approve`, { method: "POST", body: JSON.stringify({ comment: approvalComments[id] || null }) });
+    setComment(id, "");
+    load();
+  };
+  const reject = async (id: number) => {
+    await api(`/users/${id}/reject`, { method: "POST", body: JSON.stringify({ comment: approvalComments[id] || null }) });
+    setComment(id, "");
+    load();
+  };
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +170,7 @@ export default function AdminUsersPage() {
   const tabs = [
     { id: "active", label: "Active Users", count: users.length },
     { id: "pending", label: "Pending Approvals", count: pending.length },
+    { id: "resets", label: "Password Resets", count: resetRequests.length },
     { id: "invitations", label: "Invitations", count: invitations.length },
   ];
 
@@ -146,6 +182,16 @@ export default function AdminUsersPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}><Filter className="h-4 w-4" /> Filters</Button>
+            <Button variant="secondary" size="sm" onClick={() => exportCsv("users", [
+              { header: "ID", value: (u: User) => u.id },
+              { header: "Full Name", value: (u: User) => u.full_name },
+              { header: "Email", value: (u: User) => u.email },
+              { header: "Employee ID", value: (u: User) => u.employee_id },
+              { header: "Devsinc ID", value: (u: User) => u.devsinc_id },
+              { header: "Role", value: (u: User) => u.role },
+              { header: "Active", value: (u: User) => (u.is_active ? "Yes" : "No") },
+              { header: "Approval", value: (u: User) => u.approval_status },
+            ], tab === "pending" ? pending : users)}><Download className="h-4 w-4" /> CSV</Button>
             <Button variant="secondary" size="sm" onClick={() => setShowInvite(true)}><Mail className="h-4 w-4" /> Send Invite</Button>
             <Button size="sm" onClick={() => setShowCreate(true)}><UserPlus className="h-4 w-4" /> Create User</Button>
           </>
@@ -169,57 +215,75 @@ export default function AdminUsersPage() {
       <Tabs tabs={tabs} active={tab} onChange={(id) => setTab(id as Tab)} />
 
       {tab === "active" && (
-        <DataTable>
-          <thead className="border-b border-slate-200 bg-slate-50/80">
-            <tr>
-              <RecordIdHeader />
-              {["Name", "Email", "Role", "Employee ID", "Devsinc ID", "Status", "Actions"].map((h) => <th key={h}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <RecordIdCell value={u.id} />
-                <td className="font-medium text-slate-900">{u.full_name}</td>
-                <td className="text-slate-600">{u.email}</td>
-                <td><Badge variant="indigo" className="capitalize">{u.role}</Badge></td>
-                <td className="text-slate-600">{u.employee_id}</td>
-                <td><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{u.role === "engineer" ? (u.devsinc_id || "—") : "—"}</code></td>
-                <td>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant={u.is_active ? "green" : "red"}>{u.is_active ? "Active" : "Inactive"}</Badge>
-                    {u.must_reset_password && <Badge variant="yellow">Reset required</Badge>}
-                  </div>
-                </td>
-                <td>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Edit"><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => { setResetUser(u); setResetPassword(""); setError(""); }} title="Reset password"><KeyRound className="h-4 w-4" /></Button>
-                    {u.is_active && (
-                      <Button variant="ghost" size="sm" onClick={() => deactivate(u)} title="Deactivate"><UserX className="h-4 w-4 text-red-500" /></Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <AdminUsersTable
+          users={users}
+          onEdit={openEdit}
+          onReset={(u) => { setResetUser(u); setResetPassword(""); setError(""); }}
+          onDeactivate={deactivate}
+        />
       )}
 
       {tab === "pending" && (
         pending.length === 0 ? (
-          <EmptyState title="No pending approvals" description="BD registration requests will appear here." />
+          <EmptyState title="No pending approvals" description="New registration requests will appear here." />
         ) : (
           <div className="space-y-3">
             {pending.map((u) => (
-              <div key={u.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-card">
-                <div>
-                  <p className="font-medium text-slate-900">{u.full_name}</p>
-                  <p className="text-sm text-slate-500">{u.email} · BD Registration</p>
+              <div key={u.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{u.full_name}</p>
+                    <p className="text-sm text-slate-500">{u.email} · Employee ID: {u.employee_id}</p>
+                  </div>
+                  <Badge variant="indigo" className="capitalize">{u.role} registration</Badge>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => approve(u.id)}>Approve</Button>
-                  <Button size="sm" variant="danger" onClick={() => reject(u.id)}>Reject</Button>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Comment to applicant (optional)</label>
+                    <Input
+                      value={approvalComments[u.id] || ""}
+                      onChange={(e) => setComment(u.id, e.target.value)}
+                      placeholder="e.g. Welcome aboard / reason for decline…"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => approve(u.id)}>Approve</Button>
+                    <Button size="sm" variant="danger" onClick={() => reject(u.id)}>Reject</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === "resets" && (
+        resetRequests.length === 0 ? (
+          <EmptyState title="No password reset requests" description="Forgot-password requests awaiting your approval will appear here." />
+        ) : (
+          <div className="space-y-3">
+            {resetRequests.map((r) => (
+              <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-card">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{r.full_name || r.email}</p>
+                    <p className="text-sm text-slate-500">{r.email}{r.role ? ` · ${r.role}` : ""} · requested {new Date(r.created_at).toLocaleString()}</p>
+                  </div>
+                  <Badge variant="yellow">Password reset</Badge>
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">Comment (optional)</label>
+                    <Input
+                      value={resetComments[r.id] || ""}
+                      onChange={(e) => setResetComments((c) => ({ ...c, [r.id]: e.target.value }))}
+                      placeholder="Optional note to the user…"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => approveReset(r.id)}>Approve &amp; send link</Button>
+                    <Button size="sm" variant="danger" onClick={() => rejectReset(r.id)}>Reject</Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -228,30 +292,7 @@ export default function AdminUsersPage() {
       )}
 
       {tab === "invitations" && (
-        <DataTable>
-          <thead className="border-b border-slate-200 bg-slate-50/80">
-            <tr>
-              <RecordIdHeader />
-              {["Email", "Role", "Expires", "Link", "Actions"].map((h) => <th key={h}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {invitations.map((inv) => (
-              <tr key={inv.id}>
-                <RecordIdCell value={inv.id} />
-                <td className="font-medium">{inv.email}</td>
-                <td className="capitalize">{inv.role}</td>
-                <td className="text-slate-500">{new Date(inv.expires_at).toLocaleDateString()}</td>
-                <td>
-                  <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/invite/${inv.token}`); alert("Invite link copied!"); }}>
-                    Copy link
-                  </button>
-                </td>
-                <td><Button variant="danger" size="sm" onClick={() => revokeInvite(inv.id)}>Revoke</Button></td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        <AdminInvitationsTable invitations={invitations} onRevoke={revokeInvite} />
       )}
 
       <Modal open={showCreate} title="Create User" onClose={() => setShowCreate(false)}>

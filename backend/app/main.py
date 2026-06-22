@@ -5,9 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 
-from app.api.routes import admin, agents, auth, issues, leads, reports, teams, users
+from app.api.routes import admin, agents, auth, calendar, issues, leads, reports, teams, users
 from app.api.routes.profiles import profiles_router, targets_router
 from app.core.database import Base, engine
+from app.models import auth_token as auth_token_models  # noqa: F401
+from app.models import calendar as calendar_models  # noqa: F401
 from app.models import tenant  # noqa: F401
 from app.seed import seed_database
 
@@ -19,6 +21,8 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS devsinc_id VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_type VARCHAR(50)"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_comment TEXT"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS team_lead_name VARCHAR(255)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS cluster_head_id INTEGER REFERENCES users(id)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_number VARCHAR(50)"))
@@ -48,6 +52,7 @@ app.include_router(reports.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
+app.include_router(calendar.router, prefix="/api")
 
 
 @app.get("/api/health")

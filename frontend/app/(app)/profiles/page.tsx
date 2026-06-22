@@ -10,7 +10,8 @@ import { BulkUpdateModal, BulkField } from "@/components/BulkUpdateModal";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Input, Select, Modal, FormField, Tabs, Spinner } from "@/components/ui";
-import { Plus, Filter } from "lucide-react";
+import { exportCsv } from "@/lib/csv";
+import { Plus, Filter, Download } from "lucide-react";
 
 const PROFILE_BULK: BulkField[] = [
   { key: "primary_tech_stack", label: "Tech Stack", type: "text" },
@@ -91,6 +92,18 @@ export default function ProfilesPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}><Filter className="h-4 w-4" /> Filters</Button>
+            <Button variant="secondary" size="sm" onClick={() => exportCsv("profiles", [
+              { header: "ID", value: (p: Profile) => p.id },
+              { header: "Full Name", value: (p: Profile) => p.full_name },
+              { header: "Primary Tech Stack", value: (p: Profile) => p.primary_tech_stack },
+              { header: "LinkedIn URL", value: (p: Profile) => p.linkedin_url },
+              { header: "LinkedIn Verified", value: (p: Profile) => (p.linkedin_verified ? "Yes" : "No") },
+              { header: "GitHub URL", value: (p: Profile) => p.github_url },
+              { header: "GitHub Present", value: (p: Profile) => (p.github_present ? "Yes" : "No") },
+              { header: "Assigned Engineer", value: (p: Profile) => p.assigned_engineer_name },
+              { header: "Linked Leads", value: (p: Profile) => p.linked_leads_count },
+              { header: "Active", value: (p: Profile) => (p.is_active ? "Yes" : "No") },
+            ], profiles)}><Download className="h-4 w-4" /> CSV</Button>
             <Button size="sm" onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Add Profile</Button>
           </>
         }

@@ -27,19 +27,28 @@
 
 @layer components {
   .page-container {
-    @apply mx-auto max-w-[1600px] space-y-6 p-6 lg:p-8;
+    @apply w-full space-y-6 p-4 sm:p-6 lg:p-8;
+  }
+
+  .data-table {
+    @apply w-max min-w-full table-auto;
   }
 
   .data-table th {
-    @apply whitespace-nowrap px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+    @apply whitespace-nowrap px-5 py-4 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500;
   }
 
   .data-table td {
-    @apply px-4 py-3.5 text-sm text-slate-700;
+    @apply px-5 py-4 text-sm leading-relaxed text-slate-700 align-top;
   }
 
   .data-table tbody tr {
     @apply border-b border-slate-100 transition-colors hover:bg-slate-50/80;
+  }
+
+  .table-scroll {
+    @apply overflow-x-auto overscroll-x-contain;
+    scrollbar-gutter: stable;
   }
 
   .input-label {

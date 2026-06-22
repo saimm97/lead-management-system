@@ -13,7 +13,9 @@ export interface User {
   tenant_id?: number | null;
   is_active: boolean;
   approval_status: string;
+  approval_comment?: string | null;
   must_reset_password?: boolean;
+  has_subordinates?: boolean;
   created_at: string;
 }
 
@@ -21,6 +23,23 @@ export interface ImportResult {
   created: number;
   skipped: number;
   errors: string[];
+}
+
+export interface RegisterResult {
+  status: "pending_confirmation" | "pending_approval";
+  message: string;
+  confirmation_url?: string | null;
+}
+
+export interface PasswordResetRequest {
+  id: number;
+  user_id: number;
+  email: string;
+  full_name: string | null;
+  role: string | null;
+  status: string;
+  admin_comment: string | null;
+  created_at: string;
 }
 
 export interface Lead {
@@ -50,6 +69,7 @@ export interface Lead {
   interview_number: string | null;
   interview_round: string | null;
   notes: string | null;
+  issue_count: number;
   created_at: string;
   updated_at: string;
 }
