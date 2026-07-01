@@ -28,6 +28,8 @@ class User(Base):
     approval_status: Mapped[ApprovalStatus] = mapped_column(
         SAEnum(ApprovalStatus), default=ApprovalStatus.APPROVED
     )
+    approval_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    team_lead_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     must_reset_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

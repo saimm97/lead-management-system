@@ -1,12 +1,16 @@
+import csv
+import io
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_, select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.core.enums import UserRole
+from app.models.issue import Issue
 from app.models.lead import Lead, LeadStatusHistory, LeadStatusConfig, LeadDropdownOption
 from app.models.profile import Profile
 from app.models.user import User
@@ -50,6 +54,11 @@ async def _lead_to_response(db: AsyncSession, lead: Lead) -> LeadResponse:
         profile_name = p.full_name if p else None
     engineer = await get_user(db, lead.assigned_engineer_id)
     cluster_head = await get_user(db, lead.cluster_head_id)
+    issue_count = (
+        await db.execute(
+            select(func.count()).select_from(Issue).where(Issue.related_lead_id == lead.id)
+        )
+    ).scalar() or 0
     return LeadResponse(
         id=lead.id,
         company=lead.company,
@@ -77,6 +86,7 @@ async def _lead_to_response(db: AsyncSession, lead: Lead) -> LeadResponse:
         interview_number=lead.interview_number,
         interview_round=lead.interview_round,
         notes=lead.notes,
+        issue_count=issue_count,
         created_at=lead.created_at,
         updated_at=lead.updated_at,
     )
@@ -121,7 +131,7 @@ async def create_status_config_entry(
 
 @router.get("/dropdown-options", response_model=list[DropdownOptionResponse])
 async def list_dropdown_options(
-    category: str = Query(..., pattern="^(interview_number|interview_round)$"),
+    category: str = Query(..., pattern="^(interview_number|interview_round|lead_issue_type)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -175,6 +185,8 @@ async def list_leads(
     company: str | None = None,
     assigned_engineer_id: int | None = None,
     bd_id: int | None = None,
+    sort_by: str = Query("id", pattern="^(id|created_at|company|job_title|job_source|primary_tech|phase|type|status|interview_number|interview_round|updated_at|engineer|bd|cluster_head)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -187,17 +199,17 @@ async def list_leads(
         elif user.role in (UserRole.ADMIN, UserRole.MANAGER):
             pass
     elif scope == "subordinate":
-        if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-            raise HTTPException(status_code=403, detail="Not authorized")
         sub_ids = await _get_subordinate_ids(db, user.id)
-        if user.role == UserRole.ADMIN:
+        if sub_ids:
             query = query.where(
-                or_(Lead.assigned_engineer_id.in_(sub_ids), Lead.bd_id.in_(sub_ids))
-            ) if sub_ids else query
-        else:
-            query = query.where(
-                or_(Lead.assigned_engineer_id.in_(sub_ids), Lead.bd_id.in_(sub_ids))
+                or_(
+                    Lead.assigned_engineer_id.in_(sub_ids),
+                    Lead.bd_id.in_(sub_ids),
+                    Lead.assigned_by_bd_id.in_(sub_ids),
+                )
             )
+        else:
+            query = query.where(false())
     if job_source:
         query = query.where(Lead.job_source == job_source)
     if phase:
@@ -221,11 +233,129 @@ async def list_leads(
 
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar() or 0
-    query = query.order_by(Lead.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+
+    sort_map = {
+        "id": Lead.id,
+        "created_at": Lead.created_at,
+        "company": Lead.company,
+        "job_title": Lead.job_title,
+        "job_source": Lead.job_source,
+        "primary_tech": Lead.primary_tech,
+        "phase": Lead.phase,
+        "type": Lead.type,
+        "status": Lead.status,
+        "interview_number": Lead.interview_number,
+        "interview_round": Lead.interview_round,
+        "updated_at": Lead.updated_at,
+        "engineer": Lead.assigned_engineer_id,
+        "bd": Lead.bd_id,
+        "cluster_head": Lead.cluster_head_id,
+    }
+    sort_col = sort_map.get(sort_by, Lead.id)
+    order = sort_col.asc() if sort_dir == "asc" else sort_col.desc()
+    query = query.order_by(order).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     leads = result.scalars().all()
     items = [await _lead_to_response(db, lead) for lead in leads]
     return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/export")
+async def export_leads(
+    scope: str = Query("my", pattern="^(my|subordinate|all)$"),
+    job_source: str | None = None,
+    phase: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    primary_tech: str | None = None,
+    interview_number: str | None = None,
+    interview_round: str | None = None,
+    company: str | None = None,
+    assigned_engineer_id: int | None = None,
+    bd_id: int | None = None,
+    sort_by: str = Query("id", pattern="^(id|created_at|company|job_title|job_source|primary_tech|phase|type|status|interview_number|interview_round|updated_at|engineer|bd|cluster_head)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export all leads matching the active filters (ignores pagination) as CSV."""
+    query = select(Lead)
+    if scope == "my":
+        if user.role == UserRole.ENGINEER:
+            query = query.where(Lead.assigned_engineer_id == user.id)
+        elif user.role == UserRole.BD:
+            query = query.where(or_(Lead.bd_id == user.id, Lead.assigned_by_bd_id == user.id))
+    elif scope == "subordinate":
+        sub_ids = await _get_subordinate_ids(db, user.id)
+        if sub_ids:
+            query = query.where(
+                or_(
+                    Lead.assigned_engineer_id.in_(sub_ids),
+                    Lead.bd_id.in_(sub_ids),
+                    Lead.assigned_by_bd_id.in_(sub_ids),
+                )
+            )
+        else:
+            query = query.where(false())
+    if job_source:
+        query = query.where(Lead.job_source == job_source)
+    if phase:
+        query = query.where(Lead.phase == phase)
+    if type:
+        query = query.where(Lead.type == type)
+    if status:
+        query = query.where(Lead.status.ilike(f"%{status}%"))
+    if primary_tech:
+        query = query.where(Lead.primary_tech.ilike(f"%{primary_tech}%"))
+    if interview_number:
+        query = query.where(Lead.interview_number == interview_number)
+    if interview_round:
+        query = query.where(Lead.interview_round == interview_round)
+    if company:
+        query = query.where(or_(Lead.company.ilike(f"%{company}%"), Lead.job_title.ilike(f"%{company}%")))
+    if assigned_engineer_id:
+        query = query.where(Lead.assigned_engineer_id == assigned_engineer_id)
+    if bd_id:
+        query = query.where(or_(Lead.bd_id == bd_id, Lead.assigned_by_bd_id == bd_id))
+
+    sort_map = {
+        "id": Lead.id, "created_at": Lead.created_at, "company": Lead.company,
+        "job_title": Lead.job_title, "job_source": Lead.job_source, "primary_tech": Lead.primary_tech,
+        "phase": Lead.phase, "type": Lead.type, "status": Lead.status,
+        "interview_number": Lead.interview_number, "interview_round": Lead.interview_round,
+        "updated_at": Lead.updated_at, "engineer": Lead.assigned_engineer_id,
+        "bd": Lead.bd_id, "cluster_head": Lead.cluster_head_id,
+    }
+    sort_col = sort_map.get(sort_by, Lead.id)
+    query = query.order_by(sort_col.asc() if sort_dir == "asc" else sort_col.desc())
+    result = await db.execute(query)
+    leads = result.scalars().all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "ID", "Created", "Company", "Job Title", "Source", "Primary Tech", "Technologies",
+        "Engineer", "Devsinc ID", "Cluster Head", "Interview #", "Round", "Profile",
+        "Phase", "Type", "Status", "BD", "Issues", "Notes",
+    ])
+    for lead in leads:
+        r = await _lead_to_response(db, lead)
+        writer.writerow([
+            r.id,
+            r.created_at.isoformat() if r.created_at else "",
+            r.company, r.job_title, r.job_source, r.primary_tech or "",
+            ", ".join(r.technologies), r.assigned_engineer_name or "",
+            r.assigned_engineer_devsinc_id or "", r.cluster_head_name or "",
+            r.interview_number or "", r.interview_round or "", r.profile_name or "",
+            r.phase, r.type, r.status, r.bd_name or "", r.issue_count, r.notes or "",
+        ])
+    buffer.seek(0)
+    filename = f"leads_{datetime.now(timezone.utc):%Y%m%d}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/bulk-update", response_model=BulkUpdateResult)
@@ -322,8 +452,9 @@ async def update_status(
     lead = result.scalar_one_or_none()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    if not _can_modify_lead(user, lead):
-        raise HTTPException(status_code=403, detail="Not authorized to update this lead")
+    # Lead status changes are restricted to admins and managers (engineering / BD managers).
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise HTTPException(status_code=403, detail="Only admins and managers can update lead status")
     history = LeadStatusHistory(
         lead_id=lead.id,
         changed_by_id=user.id,

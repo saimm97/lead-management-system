@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "node scripts/dev-clean.mjs && next dev -p 3000",
     "dev:quick": "echo 'WARNING: dev:quick skips cache clean and may cause 500 errors. Use yarn dev instead.' && next dev -p 3000",
+    "prebuild": "node scripts/kill-port.mjs",
     "postinstall": "node -e \"const fs=require('fs');const p='node_modules/d3-shape/src/curve/basis.js';if(!fs.existsSync(p)){console.error('Broken install — re-run yarn install');process.exit(1)}\"",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "verify": "node scripts/dev-clean.mjs && next build"
+    "verify": "node scripts/dev-clean.mjs && next build && echo '\\n✓ Build OK. Run yarn dev to start the dev server with fresh assets.'"
   },
   "dependencies": {
     "next": "15.5.19",

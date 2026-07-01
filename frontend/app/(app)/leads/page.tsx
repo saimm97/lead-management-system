@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, apiUpload, downloadTemplate } from "@/lib/api";
+import { api, apiUpload, downloadTemplate, downloadApiFile } from "@/lib/api";
+import { exportCsv } from "@/lib/csv";
 import { Lead, Paginated, User } from "@/lib/types";
 import { LeadsTable } from "@/components/LeadsTable";
 import { PageHeader } from "@/components/PageHeader";
@@ -12,6 +13,7 @@ import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Select, Input, Modal, Tabs, Spinner } from "@/components/ui";
 import { Plus, Filter, Upload, Download } from "lucide-react";
+import { SortDirection } from "@/lib/tableUtils";
 
 const LEAD_BULK_FIELDS: BulkField[] = [
   { key: "phase", label: "Phase", type: "select", options: ["Applied", "Screening", "Interview", "Offer", "Closed"].map((v) => ({ value: v, label: v })) },
@@ -59,6 +61,10 @@ export default function LeadsPage() {
     interview_number: "", interview_round: "", company: "",
     assigned_engineer_id: "", bd_id: "",
   });
+  const [statusConfig, setStatusConfig] = useState<{ phase: string; type: string; status: string }[]>([]);
+  const [interviewNumbers, setInterviewNumbers] = useState<string[]>([]);
+  const [interviewRounds, setInterviewRounds] = useState<string[]>([]);
+  const [sort, setSort] = useState<{ columnId: string; direction: SortDirection }>({ columnId: "id", direction: "asc" });
 
   const bulk = useBulkSelect(leads);
 
@@ -75,28 +81,77 @@ export default function LeadsPage() {
     if (filters.company) params.set("company", filters.company);
     if (filters.assigned_engineer_id) params.set("assigned_engineer_id", filters.assigned_engineer_id);
     if (filters.bd_id) params.set("bd_id", filters.bd_id);
+    params.set("sort_by", sort.columnId);
+    params.set("sort_dir", sort.direction);
     api<Paginated<Lead>>(`/leads?${params}`)
       .then((data) => { setLeads(data.items); setTotal(data.total); })
       .finally(() => setLoading(false));
   };
 
+  const filterParams = () => {
+    const params = new URLSearchParams({ scope });
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+    params.set("sort_by", sort.columnId);
+    params.set("sort_dir", sort.direction);
+    return params;
+  };
+
+  const exportPage = () => {
+    exportCsv("leads_page", [
+      { header: "ID", value: (l: Lead) => l.id },
+      { header: "Created", value: (l: Lead) => l.created_at },
+      { header: "Company", value: (l: Lead) => l.company },
+      { header: "Job Title", value: (l: Lead) => l.job_title },
+      { header: "Source", value: (l: Lead) => l.job_source },
+      { header: "Primary Tech", value: (l: Lead) => l.primary_tech },
+      { header: "Technologies", value: (l: Lead) => l.technologies.join("; ") },
+      { header: "Engineer", value: (l: Lead) => l.assigned_engineer_name },
+      { header: "Devsinc ID", value: (l: Lead) => l.assigned_engineer_devsinc_id },
+      { header: "Cluster Head", value: (l: Lead) => l.cluster_head_name },
+      { header: "Interview #", value: (l: Lead) => l.interview_number },
+      { header: "Round", value: (l: Lead) => l.interview_round },
+      { header: "Profile", value: (l: Lead) => l.profile_name },
+      { header: "Phase", value: (l: Lead) => l.phase },
+      { header: "Type", value: (l: Lead) => l.type },
+      { header: "Status", value: (l: Lead) => l.status },
+      { header: "BD", value: (l: Lead) => l.bd_name },
+      { header: "Issues", value: (l: Lead) => l.issue_count },
+    ], leads);
+  };
+
+  const exportAll = () => {
+    downloadApiFile(`/leads/export?${filterParams()}`, "leads.csv").catch(() => alert("Export failed"));
+  };
+
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) setUser(JSON.parse(stored));
-    api<User[]>("/users").then((users) => {
-      setEngineers(users.filter((u) => u.role === "engineer"));
-      setClusterHeads(users.filter((u) => u.role === "manager" && u.manager_type === "engineering_manager"));
-      setBds(users.filter((u) => u.role === "bd"));
-    });
+    api<User[]>("/users")
+      .then((users) => {
+        setEngineers(users.filter((u) => u.role === "engineer"));
+        setClusterHeads(users.filter((u) => u.role === "manager" && u.manager_type === "engineering_manager"));
+        setBds(users.filter((u) => u.role === "bd"));
+      })
+      .catch(() => { /* engineers/BD cannot list users */ });
+
+    api<{ phase: string; type: string; status: string }[]>("/leads/status-config")
+      .then(setStatusConfig)
+      .catch(() => setStatusConfig([]));
+    api<{ label: string }[]>("/leads/dropdown-options?category=interview_number")
+      .then((opts) => setInterviewNumbers(opts.map((o) => o.label)))
+      .catch(() => setInterviewNumbers([]));
+    api<{ label: string }[]>("/leads/dropdown-options?category=interview_round")
+      .then((opts) => setInterviewRounds(opts.map((o) => o.label)))
+      .catch(() => setInterviewRounds([]));
   }, []);
 
   useEffect(() => {
     load();
-  }, [scope, page, pageSize, filters]);
+  }, [scope, page, pageSize, filters, sort]);
 
   useEffect(() => {
     bulk.clear();
-  }, [scope, page, pageSize, filters]);
+  }, [scope, page, pageSize, filters, sort]);
 
   const showHistory = async (id: number) => {
     setHistoryLeadId(id);
@@ -128,10 +183,25 @@ export default function LeadsPage() {
   const canBulk = user && ["admin", "manager", "bd"].includes(user.role);
   const canImport = user && ["admin", "manager"].includes(user.role);
   const isManager = user && ["admin", "manager"].includes(user.role);
+  const canSeeSubordinates = isManager || !!user?.has_subordinates;
+
+  const typeOptions = useMemo(() => {
+    const rows = filters.phase ? statusConfig.filter((c) => c.phase === filters.phase) : statusConfig;
+    return [...new Set(rows.map((c) => c.type))].filter(Boolean).sort();
+  }, [statusConfig, filters.phase]);
+
+  const statusOptions = useMemo(() => {
+    const rows = statusConfig.filter(
+      (c) => (!filters.phase || c.phase === filters.phase) && (!filters.type || c.type === filters.type)
+    );
+    return [...new Set(rows.map((c) => c.status))].filter(Boolean).sort();
+  }, [statusConfig, filters.phase, filters.type]);
+
+  const phaseOptions = useMemo(() => [...new Set(statusConfig.map((c) => c.phase))].filter(Boolean), [statusConfig]);
 
   const tabs = [
     { id: "my", label: "My Leads", count: scope === "my" ? total : undefined },
-    ...(isManager ? [{ id: "subordinate", label: "Subordinate Leads", count: scope === "subordinate" ? total : undefined }] : []),
+    ...(canSeeSubordinates ? [{ id: "subordinate", label: "Subordinate Leads", count: scope === "subordinate" ? total : undefined }] : []),
   ];
 
   return (
@@ -142,17 +212,14 @@ export default function LeadsPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}><Filter className="h-4 w-4" /> Filters</Button>
+            <Button variant="secondary" size="sm" onClick={exportPage} title="Export the current page"><Download className="h-4 w-4" /> CSV (page)</Button>
+            <Button variant="secondary" size="sm" onClick={exportAll} title="Export all leads matching the current filters"><Download className="h-4 w-4" /> CSV (all)</Button>
             {canImport && (
               <>
                 <Button variant="secondary" size="sm" onClick={() => downloadTemplate("leads")}><Download className="h-4 w-4" /> Template</Button>
                 <Button variant="secondary" size="sm" onClick={() => setShowImport(true)}><Upload className="h-4 w-4" /> Import Excel</Button>
               </>
             )}
-            <Select value={String(pageSize)} onChange={(e) => setPageSize(Number(e.target.value))} className="w-28">
-              <option value="10">10 / page</option>
-              <option value="25">25 / page</option>
-              <option value="50">50 / page</option>
-            </Select>
             {canCreate && (
               <Link href="/leads/new"><Button size="sm"><Plus className="h-4 w-4" /> Create Lead</Button></Link>
             )}
@@ -178,16 +245,22 @@ export default function LeadsPage() {
             </Select>
           </FilterField>
           <FilterField label="Phase">
-            <Select value={filters.phase} onChange={(e) => setFilters({ ...filters, phase: e.target.value })}>
+            <Select value={filters.phase} onChange={(e) => setFilters({ ...filters, phase: e.target.value, type: "", status: "" })}>
               <option value="">All</option>
-              {["Applied", "Screening", "Interview", "Offer", "Closed"].map((p) => <option key={p} value={p}>{p}</option>)}
+              {(phaseOptions.length ? phaseOptions : ["Applied", "Screening", "Interview", "Offer", "Closed"]).map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
           </FilterField>
           <FilterField label="Type">
-            <Input value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} placeholder="e.g. HR Interview" />
+            <Select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value, status: "" })}>
+              <option value="">All</option>
+              {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
           </FilterField>
           <FilterField label="Status">
-            <Input value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} placeholder="Partial match" />
+            <Select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+              <option value="">All</option>
+              {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </Select>
           </FilterField>
           <FilterField label="Primary Tech">
             <Input value={filters.primary_tech} onChange={(e) => setFilters({ ...filters, primary_tech: e.target.value })} />
@@ -195,18 +268,23 @@ export default function LeadsPage() {
           <FilterField label="Interview #">
             <Select value={filters.interview_number} onChange={(e) => setFilters({ ...filters, interview_number: e.target.value })}>
               <option value="">All</option>
-              {["1st", "2nd", "3rd", "4th", "5th", "Final"].map((n) => <option key={n} value={n}>{n}</option>)}
+              {(interviewNumbers.length ? interviewNumbers : ["1st", "2nd", "3rd", "4th", "5th", "Final"]).map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
           </FilterField>
           <FilterField label="Interview Round">
-            <Input value={filters.interview_round} onChange={(e) => setFilters({ ...filters, interview_round: e.target.value })} placeholder="e.g. HR Round" />
-          </FilterField>
-          <FilterField label="Engineer">
-            <Select value={filters.assigned_engineer_id} onChange={(e) => setFilters({ ...filters, assigned_engineer_id: e.target.value })}>
+            <Select value={filters.interview_round} onChange={(e) => setFilters({ ...filters, interview_round: e.target.value })}>
               <option value="">All</option>
-              {engineers.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+              {interviewRounds.map((r) => <option key={r} value={r}>{r}</option>)}
             </Select>
           </FilterField>
+          {engineers.length > 0 && (
+            <FilterField label="Engineer">
+              <Select value={filters.assigned_engineer_id} onChange={(e) => setFilters({ ...filters, assigned_engineer_id: e.target.value })}>
+                <option value="">All</option>
+                {engineers.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+              </Select>
+            </FilterField>
+          )}
           {isManager && (
             <FilterField label="BD">
               <Select value={filters.bd_id} onChange={(e) => setFilters({ ...filters, bd_id: e.target.value })}>
@@ -227,12 +305,21 @@ export default function LeadsPage() {
           onToggle={bulk.toggle}
           onToggleAll={bulk.toggleAll}
           allSelected={bulk.allSelected}
+          sort={sort}
+          onSortChange={(columnId, direction) => { setSort({ columnId, direction }); setPage(1); }}
         />
       )}
 
-      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-card">
-        <p className="text-sm text-slate-500">Showing <span className="font-medium">{leads.length}</span> of <span className="font-medium">{total}</span></p>
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-card">
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-500">Showing <span className="font-medium">{leads.length}</span> of <span className="font-medium">{total}</span></p>
+          <Select value={String(pageSize)} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="w-28">
+            <option value="10">10 / page</option>
+            <option value="25">25 / page</option>
+            <option value="50">50 / page</option>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
           <span className="px-2 text-sm">Page {page}</span>
           <Button variant="secondary" size="sm" disabled={page * pageSize >= total} onClick={() => setPage(page + 1)}>Next</Button>

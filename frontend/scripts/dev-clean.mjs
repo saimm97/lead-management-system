@@ -32,7 +32,12 @@ function killPort() {
 function removeNextCache() {
   const nextDir = join(root, ".next");
   if (existsSync(nextDir)) {
-    console.log("[dev-clean] Removing stale .next cache...");
+    const isProdBuild = existsSync(join(nextDir, "BUILD_ID")) && existsSync(join(nextDir, "export-marker.json"));
+    if (isProdBuild) {
+      console.log("[dev-clean] Removing production .next cache (incompatible with dev mode)...");
+    } else {
+      console.log("[dev-clean] Removing stale .next cache...");
+    }
     rmSync(nextDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
   }
 }

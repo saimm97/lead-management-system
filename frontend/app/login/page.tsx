@@ -120,7 +120,10 @@ export default function LoginPage() {
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" required autoComplete="email" />
             </div>
             <div>
-              <Label>Password</Label>
+              <div className="flex items-center justify-between">
+                <Label>Password</Label>
+                <Link href="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700">Forgot password?</Link>
+              </div>
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required autoComplete="current-password" />
             </div>
             {error && (
@@ -132,8 +135,8 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
-            BD Executive?{" "}
-            <Link href="/register/bd" className="font-medium text-brand-600 hover:text-brand-700">Create an account</Link>
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-medium text-brand-600 hover:text-brand-700">Create an account</Link>
           </p>
 
           <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4 shadow-card">

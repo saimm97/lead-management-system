@@ -11,7 +11,8 @@ import { BulkUpdateModal, BulkField } from "@/components/BulkUpdateModal";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Select, Tabs, Spinner } from "@/components/ui";
-import { Plus, Filter } from "lucide-react";
+import { exportCsv } from "@/lib/csv";
+import { Plus, Filter, X, Download } from "lucide-react";
 
 const ISSUE_BULK: BulkField[] = [
   { key: "status", label: "Status", type: "select", options: ["open", "in_progress", "resolved", "closed"].map((v) => ({ value: v, label: v.replace("_", " ") })) },
@@ -27,11 +28,13 @@ export default function IssuesPage() {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ status: "", priority: "", category: "" });
+  const [leadFilter, setLeadFilter] = useState<number | null>(null);
   const bulk = useBulkSelect(issues);
 
   const load = () => {
     setLoading(true);
     const params = new URLSearchParams({ scope });
+    if (leadFilter !== null) params.set("related_lead_id", String(leadFilter));
     if (filters.status) params.set("status", filters.status);
     if (filters.priority) params.set("priority", filters.priority);
     if (filters.category) params.set("category", filters.category);
@@ -41,9 +44,16 @@ export default function IssuesPage() {
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) setUser(JSON.parse(stored));
+    const leadId = new URLSearchParams(window.location.search).get("lead_id");
+    if (leadId) setLeadFilter(Number(leadId));
   }, []);
 
-  useEffect(() => { load(); bulk.clear(); }, [scope, filters]);
+  useEffect(() => { load(); bulk.clear(); }, [scope, filters, leadFilter]);
+
+  const clearLeadFilter = () => {
+    setLeadFilter(null);
+    window.history.replaceState(null, "", "/issues");
+  };
 
   const bulkUpdate = async (updates: Record<string, unknown>) => {
     await api("/issues/bulk-update", { method: "POST", body: JSON.stringify({ ids: bulk.ids, updates }) });
@@ -86,13 +96,32 @@ export default function IssuesPage() {
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}><Filter className="h-4 w-4" /> Filters</Button>
+            <Button variant="secondary" size="sm" onClick={() => exportCsv("issues", [
+              { header: "ID", value: (i: Issue) => i.id },
+              { header: "Title", value: (i: Issue) => i.title },
+              { header: "Category", value: (i: Issue) => i.category },
+              { header: "Priority", value: (i: Issue) => i.priority },
+              { header: "Status", value: (i: Issue) => i.status },
+              { header: "Reported By", value: (i: Issue) => i.reported_by_name },
+              { header: "Assigned Manager", value: (i: Issue) => i.assigned_manager_name },
+              { header: "Related Lead", value: (i: Issue) => i.related_lead_id },
+              { header: "Created", value: (i: Issue) => i.created_at },
+            ], issues)}><Download className="h-4 w-4" /> CSV</Button>
             <Link href="/issues/new">
               <Button size="sm"><Plus className="h-4 w-4" /> Log Issue</Button>
             </Link>
           </>
         }
       />
-      <Tabs tabs={tabs} active={scope} onChange={setScope} />
+      {leadFilter !== null && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <span>Showing issues for <span className="font-semibold">Lead #{leadFilter}</span> only.</span>
+          <button onClick={clearLeadFilter} className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-amber-700 transition hover:bg-amber-100">
+            <X className="h-3.5 w-3.5" /> Clear
+          </button>
+        </div>
+      )}
+      {leadFilter === null && <Tabs tabs={tabs} active={scope} onChange={setScope} />}
       {showFilters && (
         <FilterPanel columns={3}>
           <FilterField label="Status">

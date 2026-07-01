@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, Button, DataTable, Textarea, RecordIdCell, RecordIdHeader } from "./ui";
+import { useMemo, useState } from "react";
+import { Badge, Button, Textarea } from "./ui";
 import { Issue } from "@/lib/types";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Modal } from "./ui";
+import { SortableTable, TableColumn } from "./SortableTable";
+import { COL_MIN } from "@/lib/tableUtils";
 
 const priorityColors: Record<string, "default" | "green" | "blue" | "red" | "yellow" | "purple"> = {
   low: "default", medium: "blue", high: "yellow", critical: "red",
@@ -13,6 +15,35 @@ const priorityColors: Record<string, "default" | "green" | "blue" | "red" | "yel
 const statusColors: Record<string, "default" | "green" | "blue" | "red" | "yellow" | "purple"> = {
   open: "red", in_progress: "yellow", resolved: "green", closed: "default",
 };
+
+function issueColumns(onSelect: (issue: Issue) => void): TableColumn<Issue>[] {
+  return [
+    { id: "id", label: "ID", minWidth: COL_MIN.id, getSortValue: (i) => i.id, className: "text-center font-medium tabular-nums text-slate-500", render: (i) => i.id },
+    { id: "created_at", label: "Created", minWidth: COL_MIN.date, getSortValue: (i) => i.created_at, className: "text-slate-500", render: (i) => new Date(i.created_at).toLocaleDateString() },
+    { id: "title", label: "Title", minWidth: COL_MIN.xl, getSortValue: (i) => i.title, className: "font-medium text-slate-900", render: (i) => i.title },
+    { id: "category", label: "Category", minWidth: COL_MIN.sm, getSortValue: (i) => i.category, className: "capitalize text-slate-600", render: (i) => i.category.replace("_", " ") },
+    { id: "priority", label: "Priority", minWidth: COL_MIN.sm, getSortValue: (i) => i.priority, render: (i) => <Badge variant={priorityColors[i.priority]}>{i.priority}</Badge> },
+    { id: "status", label: "Status", minWidth: COL_MIN.sm, getSortValue: (i) => i.status, render: (i) => <Badge variant={statusColors[i.status]}>{i.status.replace("_", " ")}</Badge> },
+    {
+      id: "reported_by", label: "Reported By", minWidth: COL_MIN.md, getSortValue: (i) => i.reported_by_name || "",
+      render: (i) => (
+        <>
+          <p className="font-medium">{i.reported_by_name}</p>
+          <Badge variant="purple" className="mt-1">{i.reported_by_role}</Badge>
+        </>
+      ),
+    },
+    {
+      id: "lead", label: "Lead", minWidth: COL_MIN.sm, getSortValue: (i) => i.related_lead_id || 0,
+      render: (i) => i.related_lead_id ? <Link href={`/leads/${i.related_lead_id}`} className="text-brand-600 hover:underline">#{i.related_lead_id}</Link> : "—",
+    },
+    { id: "manager", label: "Manager", minWidth: COL_MIN.md, getSortValue: (i) => i.assigned_manager_name || "", className: "text-slate-600", render: (i) => i.assigned_manager_name || "—" },
+    {
+      id: "actions", label: "Actions", minWidth: COL_MIN.actions, sortable: false,
+      render: (i) => <button onClick={() => onSelect(i)} className="text-sm font-medium text-brand-600 hover:text-brand-700">View</button>,
+    },
+  ];
+}
 
 export function IssuesTable({
   issues,
@@ -31,50 +62,21 @@ export function IssuesTable({
   onToggleAll?: () => void;
   allSelected?: boolean;
 }) {
-  if (issues.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center text-sm text-slate-500">
-        No issues found.
-      </div>
-    );
-  }
+  const columns = useMemo(() => issueColumns(onSelect), [onSelect]);
 
   return (
-    <DataTable>
-      <thead className="border-b border-slate-200 bg-slate-50/80">
-        <tr>
-          {selectable && <th className="w-10"><input type="checkbox" checked={allSelected} onChange={onToggleAll} className="rounded" /></th>}
-          <RecordIdHeader />
-          {["Created", "Title", "Category", "Priority", "Status", "Reported By", "Lead", "Manager", ""].map((h) => (
-            <th key={h || "a"}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {issues.map((issue) => (
-          <tr key={issue.id} className={selected?.has(issue.id) ? "bg-brand-50/50" : undefined}>
-            {selectable && <td><input type="checkbox" checked={selected?.has(issue.id)} onChange={() => onToggle?.(issue.id)} className="rounded" /></td>}
-            <RecordIdCell value={issue.id} />
-            <td className="text-slate-500">{new Date(issue.created_at).toLocaleDateString()}</td>
-            <td className="font-medium text-slate-900">{issue.title}</td>
-            <td className="capitalize text-slate-600">{issue.category.replace("_", " ")}</td>
-            <td><Badge variant={priorityColors[issue.priority]}>{issue.priority}</Badge></td>
-            <td><Badge variant={statusColors[issue.status]}>{issue.status.replace("_", " ")}</Badge></td>
-            <td>
-              <p className="font-medium">{issue.reported_by_name}</p>
-              <Badge variant="purple" className="mt-1">{issue.reported_by_role}</Badge>
-            </td>
-            <td>
-              {issue.related_lead_id ? <Link href={`/leads/${issue.related_lead_id}`} className="text-brand-600 hover:underline">#{issue.related_lead_id}</Link> : "—"}
-            </td>
-            <td className="text-slate-600">{issue.assigned_manager_name || "—"}</td>
-            <td>
-              <button onClick={() => onSelect(issue)} className="text-sm font-medium text-brand-600 hover:text-brand-700">View</button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </DataTable>
+    <SortableTable
+      storageKey="issues"
+      columns={columns}
+      data={issues}
+      emptyMessage="No issues found."
+      selectable={selectable}
+      selected={selected}
+      onToggle={onToggle}
+      onToggleAll={onToggleAll}
+      allSelected={allSelected}
+      rowClassName={(i) => (selected?.has(i.id) ? "bg-brand-50/50" : undefined)}
+    />
   );
 }
 

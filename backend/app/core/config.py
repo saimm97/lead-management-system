@@ -27,5 +27,10 @@ class Settings(BaseSettings):
     admin_name: str = "System Admin"
     frontend_url: str = "http://localhost:3000"
 
+    # Google Calendar OAuth (leave blank to disable the integration)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/calendar/callback"
+
 
 settings = Settings()

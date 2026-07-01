@@ -29,3 +29,7 @@ export const FunnelChartView = dynamic(
   () => import("./Charts").then((m) => m.FunnelChartView),
   { ssr: false, loading }
 );
+export const MultiChart = dynamic(
+  () => import("./MultiChart").then((m) => m.MultiChart),
+  { ssr: false, loading }
+);

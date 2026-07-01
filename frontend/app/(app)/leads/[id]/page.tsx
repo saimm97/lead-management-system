@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { Lead, User } from "@/lib/types";
 import { PageHeader } from "@/components/PageHeader";
 import { LeadStatusEditor } from "@/components/LeadStatusEditor";
+import { LeadIssueReporter } from "@/components/LeadIssueReporter";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
 import { ArrowLeft } from "lucide-react";
 
@@ -56,7 +57,10 @@ export default function LeadDetailPage() {
     load();
   };
 
-  const canUpdateStatus = user && ["admin", "manager", "bd", "engineer"].includes(user.role);
+  // Lead status can only be changed by admins and managers (engineering / BD managers).
+  const canUpdateStatus = user && (user.role === "admin" || user.role === "manager");
+  // JD invite toggle remains available to anyone who can edit the lead.
+  const canEditLead = user && ["admin", "manager", "bd", "engineer"].includes(user.role);
 
   if (loading) return <div className="flex justify-center py-24"><Spinner /></div>;
   if (!lead) return <p className="text-red-600">Lead not found.</p>;
@@ -74,7 +78,7 @@ export default function LeadDetailPage() {
           lead.jd_invite_sent !== undefined && (
             <div className="flex items-center gap-2">
               <Badge variant={lead.jd_invite_sent ? "green" : "yellow"}>{lead.jd_invite_sent ? "JD Invite Sent" : "JD Invite Pending"}</Badge>
-              {canUpdateStatus && <Button variant="secondary" size="sm" onClick={toggleJdInvite}>Toggle JD Invite</Button>}
+              {canEditLead && <Button variant="secondary" size="sm" onClick={toggleJdInvite}>Toggle JD Invite</Button>}
             </div>
           )
         }
@@ -127,6 +131,8 @@ export default function LeadDetailPage() {
           />
         </Card>
       )}
+
+      <LeadIssueReporter leadId={lead.id} />
     </div>
   );
 }

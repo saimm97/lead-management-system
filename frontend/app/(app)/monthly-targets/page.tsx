@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Input, Select, Modal, Textarea, FormField, Spinner } from "@/components/ui";
 import { engineerOptionLabel } from "@/lib/engineer";
-import { Plus, Filter } from "lucide-react";
+import { exportCsv } from "@/lib/csv";
+import { Plus, Filter, Download } from "lucide-react";
 
 export default function MonthlyTargetsPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -75,6 +76,17 @@ export default function MonthlyTargetsPage() {
         actions={
           <>
             {canEdit && <Button variant="secondary" size="sm" onClick={() => setShowFilters(!showFilters)}><Filter className="h-4 w-4" /> Filters</Button>}
+            <Button variant="secondary" size="sm" onClick={() => exportCsv("monthly_targets", [
+              { header: "ID", value: (t: MonthlyTarget) => t.id },
+              { header: "Engineer", value: (t: MonthlyTarget) => t.engineer_name },
+              { header: "Devsinc ID", value: (t: MonthlyTarget) => t.engineer_devsinc_id },
+              { header: "Start Date", value: (t: MonthlyTarget) => t.target_start_date },
+              { header: "End Date", value: (t: MonthlyTarget) => t.target_end_date },
+              { header: "Lead Target", value: (t: MonthlyTarget) => t.lead_target },
+              { header: "Assigned", value: (t: MonthlyTarget) => t.leads_assigned_count },
+              { header: "Progress %", value: (t: MonthlyTarget) => t.progress_pct },
+              { header: "Tech Focus", value: (t: MonthlyTarget) => t.tech_stack_focus },
+            ], targets)}><Download className="h-4 w-4" /> CSV</Button>
             {canEdit && <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44" />}
             {canEdit && <Button size="sm" onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Add Target</Button>}
           </>

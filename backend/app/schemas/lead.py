@@ -93,6 +93,7 @@ class LeadResponse(BaseModel):
     interview_number: str | None = None
     interview_round: str | None = None
     notes: str | None
+    issue_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -121,7 +122,7 @@ class StatusConfigResponse(BaseModel):
 
 
 class DropdownOptionCreate(BaseModel):
-    category: str = Field(pattern="^(interview_number|interview_round)$")
+    category: str = Field(pattern="^(interview_number|interview_round|lead_issue_type)$")
     label: str = Field(min_length=1, max_length=100)
 
 
