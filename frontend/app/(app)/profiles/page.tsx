@@ -10,6 +10,7 @@ import { BulkUpdateModal, BulkField } from "@/components/BulkUpdateModal";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Input, Select, Modal, FormField, Tabs, Spinner } from "@/components/ui";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { exportCsv } from "@/lib/csv";
 import { Plus, Filter, Download } from "lucide-react";
 
@@ -119,10 +120,13 @@ export default function ProfilesPage() {
             <Input value={filters.tech_stack} onChange={(e) => setFilters({ ...filters, tech_stack: e.target.value })} placeholder="e.g. MERN" />
           </FilterField>
           <FilterField label="Engineer">
-            <Select value={filters.engineer_id} onChange={(e) => setFilters({ ...filters, engineer_id: e.target.value })}>
-              <option value="">All</option>
-              {engineers.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-            </Select>
+            <SearchableSelect
+              value={filters.engineer_id}
+              onChange={(v) => setFilters({ ...filters, engineer_id: v })}
+              options={engineers.map((e) => ({ value: String(e.id), label: e.full_name }))}
+              placeholder="All engineers"
+              searchPlaceholder="Search engineer name…"
+            />
           </FilterField>
         </FilterPanel>
       )}

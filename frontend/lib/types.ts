@@ -14,6 +14,7 @@ export interface User {
   is_active: boolean;
   approval_status: string;
   approval_comment?: string | null;
+  team_lead_name?: string | null;
   must_reset_password?: boolean;
   has_subordinates?: boolean;
   created_at: string;
@@ -121,6 +122,8 @@ export interface Issue {
   assigned_manager_name: string | null;
   related_lead_id: number | null;
   related_profile_id: number | null;
+  related_engineer_id?: number | null;
+  related_engineer_name?: string | null;
   resolution_note: string | null;
   created_at: string;
   updated_at: string;

@@ -5,9 +5,9 @@ export function cn(...inputs: (string | boolean | undefined | null)[]) {
   return clsx(inputs);
 }
 
-export function Card({ children, className, padding = true }: { children: ReactNode; className?: string; padding?: boolean }) {
+export function Card({ children, className, padding = true, onClick }: { children: ReactNode; className?: string; padding?: boolean; onClick?: () => void }) {
   return (
-    <div className={cn("rounded-xl border border-slate-200/80 bg-white shadow-card", padding && "p-6", className)}>
+    <div onClick={onClick} className={cn("rounded-xl border border-slate-200/80 bg-white shadow-card", padding && "p-6", className)}>
       {children}
     </div>
   );

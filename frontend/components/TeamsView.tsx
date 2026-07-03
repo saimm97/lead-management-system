@@ -64,11 +64,10 @@ export function TeamsView({ team }: { team: "engineering" | "bd" }) {
 
   const members = team === "engineering" ? engineering : bdTeam;
   const filteredMembers = members.filter((m) => {
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      if (!m.full_name.toLowerCase().includes(q) && !m.email.toLowerCase().includes(q) && !m.employee_id.toLowerCase().includes(q) && !(m.devsinc_id || "").toLowerCase().includes(q)) {
-        return false;
-      }
+    if (filters.search.trim()) {
+      const hay = `${m.full_name} ${m.email} ${m.employee_id} ${m.devsinc_id || ""} ${m.role} ${m.team_lead_name || ""}`.toLowerCase();
+      // Every token must appear somewhere in the member's fields.
+      if (!filters.search.toLowerCase().split(/\s+/).every((t) => hay.includes(t))) return false;
     }
     if (filters.role && m.role !== filters.role) return false;
     if (filters.status === "active" && !m.is_active) return false;

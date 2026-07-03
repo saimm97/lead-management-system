@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, false, func, or_, select
+from sqlalchemy import String, and_, cast, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -97,6 +97,55 @@ async def _get_subordinate_ids(db: AsyncSession, manager_id: int) -> list[int]:
     return [row[0] for row in result.all()]
 
 
+# Columns the search box can target individually ("all" = every field).
+LEAD_SEARCH_FIELDS = {
+    "company", "job_title", "job_source", "primary_tech", "technologies",
+    "phase", "type", "status", "interview_number", "interview_round",
+    "notes", "id", "engineer", "bd",
+}
+
+
+def _lead_token_condition(token: str, field: str | None):
+    p = f"%{token}%"
+    user_match = select(User.id).where(
+        or_(
+            User.full_name.ilike(p),
+            User.devsinc_id.ilike(p),
+            User.employee_id.ilike(p),
+            User.email.ilike(p),
+        )
+    )
+    field_map = {
+        "id": cast(Lead.id, String).ilike(p),
+        "company": Lead.company.ilike(p),
+        "job_title": Lead.job_title.ilike(p),
+        "job_source": Lead.job_source.ilike(p),
+        "primary_tech": Lead.primary_tech.ilike(p),
+        "technologies": cast(Lead.technologies, String).ilike(p),
+        "phase": Lead.phase.ilike(p),
+        "type": Lead.type.ilike(p),
+        "status": Lead.status.ilike(p),
+        "interview_number": Lead.interview_number.ilike(p),
+        "interview_round": Lead.interview_round.ilike(p),
+        "notes": Lead.notes.ilike(p),
+        "engineer": Lead.assigned_engineer_id.in_(user_match),
+        "bd": or_(Lead.bd_id.in_(user_match), Lead.assigned_by_bd_id.in_(user_match)),
+    }
+    if field and field in field_map:
+        return field_map[field]
+    # Search across every field plus the cluster head.
+    return or_(*field_map.values(), Lead.cluster_head_id.in_(user_match))
+
+
+def _apply_lead_search(query, search: str, field: str | None = None):
+    """Token-based search: every whitespace token must match. With `field`, search
+    only that column; otherwise search across all fields."""
+    target = field if field in LEAD_SEARCH_FIELDS else None
+    for token in search.split():
+        query = query.where(_lead_token_condition(token, target))
+    return query
+
+
 @router.get("/status-config", response_model=list[StatusConfigResponse])
 async def list_status_config(
     user: User = Depends(get_current_user),
@@ -131,7 +180,7 @@ async def create_status_config_entry(
 
 @router.get("/dropdown-options", response_model=list[DropdownOptionResponse])
 async def list_dropdown_options(
-    category: str = Query(..., pattern="^(interview_number|interview_round|lead_issue_type)$"),
+    category: str = Query(..., pattern="^(interview_number|interview_round|lead_issue_type|job_source|lead_phase|lead_type)$"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -183,6 +232,8 @@ async def list_leads(
     interview_number: str | None = None,
     interview_round: str | None = None,
     company: str | None = None,
+    search: str | None = None,
+    search_field: str | None = None,
     assigned_engineer_id: int | None = None,
     bd_id: int | None = None,
     sort_by: str = Query("id", pattern="^(id|created_at|company|job_title|job_source|primary_tech|phase|type|status|interview_number|interview_round|updated_at|engineer|bd|cluster_head)$"),
@@ -226,6 +277,8 @@ async def list_leads(
         query = query.where(Lead.interview_round == interview_round)
     if company:
         query = query.where(or_(Lead.company.ilike(f"%{company}%"), Lead.job_title.ilike(f"%{company}%")))
+    if search and search.strip():
+        query = _apply_lead_search(query, search.strip(), search_field)
     if assigned_engineer_id:
         query = query.where(Lead.assigned_engineer_id == assigned_engineer_id)
     if bd_id:
@@ -271,6 +324,8 @@ async def export_leads(
     interview_number: str | None = None,
     interview_round: str | None = None,
     company: str | None = None,
+    search: str | None = None,
+    search_field: str | None = None,
     assigned_engineer_id: int | None = None,
     bd_id: int | None = None,
     sort_by: str = Query("id", pattern="^(id|created_at|company|job_title|job_source|primary_tech|phase|type|status|interview_number|interview_round|updated_at|engineer|bd|cluster_head)$"),
@@ -313,6 +368,8 @@ async def export_leads(
         query = query.where(Lead.interview_round == interview_round)
     if company:
         query = query.where(or_(Lead.company.ilike(f"%{company}%"), Lead.job_title.ilike(f"%{company}%")))
+    if search and search.strip():
+        query = _apply_lead_search(query, search.strip(), search_field)
     if assigned_engineer_id:
         query = query.where(Lead.assigned_engineer_id == assigned_engineer_id)
     if bd_id:

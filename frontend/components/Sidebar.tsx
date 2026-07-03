@@ -13,6 +13,7 @@ import {
   LogOut,
   Briefcase,
   FileText,
+  FileSearch,
   Shield,
   ChevronRight,
   Upload,
@@ -46,6 +47,7 @@ const mainNav: NavItem[] = [
   },
   { href: "/issues", label: "Issues", icon: AlertCircle, roles: ["admin", "manager", "bd", "engineer"] },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, roles: ["admin", "manager", "bd"] },
+  { href: "/cv", label: "CV Optimizer", icon: FileSearch, roles: ["admin", "manager", "bd", "engineer"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["admin", "manager"] },
 ];
 

@@ -79,6 +79,24 @@ export async function downloadApiFile(path: string, fallbackFilename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** POST a prebuilt FormData (multiple files / fields) to an authenticated endpoint. */
+export async function apiForm<T>(path: string, form: FormData): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_URL}/api${path}`, { method: "POST", headers, body: form });
+  if (res.status === 401) {
+    clearTokens();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Request failed" }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return res.json();
+}
+
 export function downloadTemplate(entity: "leads" | "profiles" | "users") {
   downloadApiFile(`/admin/import/template/${entity}`, `${entity}_template.xlsx`).catch(() =>
     alert("Failed to download template")

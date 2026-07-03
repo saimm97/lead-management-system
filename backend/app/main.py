@@ -5,8 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 
-from app.api.routes import admin, agents, auth, calendar, issues, leads, reports, teams, users
+from app.api.routes import admin, agents, auth, calendar, cv, issues, leads, reports, teams, users
 from app.api.routes.profiles import profiles_router, targets_router
+from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import auth_token as auth_token_models  # noqa: F401
 from app.models import calendar as calendar_models  # noqa: F401
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_type VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_comment TEXT"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS team_lead_name VARCHAR(255)"))
+        await conn.execute(text("ALTER TABLE issues ADD COLUMN IF NOT EXISTS related_engineer_id INTEGER REFERENCES users(id)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS cluster_head_id INTEGER REFERENCES users(id)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_number VARCHAR(50)"))
@@ -34,9 +36,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="LeadPro API", version="0.1.0", lifespan=lifespan)
 
+# Build the allowed-origins list from env (CORS_ORIGINS is comma-separated) plus the
+# configured frontend URL, so the deployed frontend can call the API.
+_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+if settings.frontend_url and settings.frontend_url not in _origins:
+    _origins.append(settings.frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_origins,
+    allow_origin_regex=settings.cors_origin_regex or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,6 +62,7 @@ app.include_router(teams.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
+app.include_router(cv.router, prefix="/api")
 
 
 @app.get("/api/health")

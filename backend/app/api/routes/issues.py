@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.core.enums import IssueStatus, UserRole
+from app.core.enums import IssueCategory, IssuePriority, IssueStatus, UserRole
 from app.models.issue import Issue, IssueComment
 from app.models.user import User
 from app.schemas.bulk import BulkUpdateRequest, BulkUpdateResult
@@ -53,6 +53,8 @@ async def _issue_response(db: AsyncSession, issue: Issue) -> IssueResponse:
         assigned_manager_name=await _user_name(db, issue.assigned_manager_id),
         related_lead_id=issue.related_lead_id,
         related_profile_id=issue.related_profile_id,
+        related_engineer_id=issue.related_engineer_id,
+        related_engineer_name=await _user_name(db, issue.related_engineer_id),
         resolution_note=issue.resolution_note,
         created_at=issue.created_at,
         updated_at=issue.updated_at,
@@ -89,12 +91,23 @@ async def list_issues(
         query = query.where(or_(Issue.reported_by_id.in_(sub_ids), Issue.assigned_manager_id == user.id))
     elif scope == "all" and user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
+    # Coerce the incoming value strings to enum members so the comparison works on
+    # Postgres native enums (which are stored by NAME, not the lowercase value).
     if status:
-        query = query.where(Issue.status == status)
+        try:
+            query = query.where(Issue.status == IssueStatus(status))
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid status: {status}")
     if priority:
-        query = query.where(Issue.priority == priority)
+        try:
+            query = query.where(Issue.priority == IssuePriority(priority))
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid priority: {priority}")
     if category:
-        query = query.where(Issue.category == category)
+        try:
+            query = query.where(Issue.category == IssueCategory(category))
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid category: {category}")
     result = await db.execute(query.order_by(Issue.created_at.desc()))
     issues = result.scalars().unique().all()
     return [await _issue_response(db, issue) for issue in issues]

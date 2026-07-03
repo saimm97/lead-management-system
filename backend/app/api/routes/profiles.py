@@ -2,7 +2,7 @@ import calendar
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -114,9 +114,21 @@ async def list_profiles(
         query = query.where(Profile.primary_tech_stack.ilike(f"%{tech_stack}%"))
     if engineer_id:
         query = query.where(Profile.assigned_engineer_id == engineer_id)
-    if search:
-        pattern = f"%{search}%"
-        query = query.where(Profile.full_name.ilike(pattern))
+    if search and search.strip():
+        for token in search.split():
+            p = f"%{token}%"
+            eng_match = select(User.id).where(
+                or_(User.full_name.ilike(p), User.devsinc_id.ilike(p), User.employee_id.ilike(p))
+            )
+            query = query.where(
+                or_(
+                    Profile.full_name.ilike(p),
+                    Profile.primary_tech_stack.ilike(p),
+                    Profile.linkedin_url.ilike(p),
+                    Profile.github_url.ilike(p),
+                    Profile.assigned_engineer_id.in_(eng_match),
+                )
+            )
     result = await db.execute(query.order_by(Profile.full_name))
     profiles = result.scalars().all()
     return [await _profile_response(db, p) for p in profiles]
