@@ -7,7 +7,7 @@ import { MonthlyTargetsTable, TargetSummaryCards } from "@/components/MonthlyTar
 import { PageHeader } from "@/components/PageHeader";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Input, Select, Modal, Textarea, FormField, Spinner } from "@/components/ui";
-import { engineerOptionLabel } from "@/lib/engineer";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { exportCsv } from "@/lib/csv";
 import { Plus, Filter, Download } from "lucide-react";
 
@@ -95,10 +95,13 @@ export default function MonthlyTargetsPage() {
       {canEdit && showFilters && (
         <FilterPanel columns={2}>
           <FilterField label="Engineer">
-            <Select value={filters.engineer_id} onChange={(e) => setFilters({ ...filters, engineer_id: e.target.value })}>
-              <option value="">All</option>
-              {engineers.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-            </Select>
+            <SearchableSelect
+              value={filters.engineer_id}
+              onChange={(v) => setFilters({ ...filters, engineer_id: v })}
+              options={engineers.map((e) => ({ value: String(e.id), label: e.full_name, hint: e.devsinc_id || e.employee_id }))}
+              placeholder="All engineers"
+              searchPlaceholder="Search engineer name…"
+            />
           </FilterField>
           <FilterField label="Tech Stack">
             <Input value={filters.tech_stack} onChange={(e) => setFilters({ ...filters, tech_stack: e.target.value })} placeholder="e.g. Python" />
@@ -114,10 +117,13 @@ export default function MonthlyTargetsPage() {
             <Input type="date" value={form.target_start_date} onChange={(e) => setForm({ ...form, target_start_date: e.target.value })} required />
           </FormField>
           <FormField label="Engineer">
-            <Select value={form.engineer_id} onChange={(e) => setForm({ ...form, engineer_id: e.target.value })} required>
-              <option value="">Select engineer</option>
-              {engineers.map((e) => <option key={e.id} value={e.id}>{engineerOptionLabel(e.full_name, e.devsinc_id)}</option>)}
-            </Select>
+            <SearchableSelect
+              value={form.engineer_id}
+              onChange={(v) => setForm({ ...form, engineer_id: v })}
+              options={engineers.map((e) => ({ value: String(e.id), label: e.full_name, hint: e.devsinc_id || e.employee_id }))}
+              placeholder="Select engineer…"
+              searchPlaceholder="Search engineer name…"
+            />
           </FormField>
           <FormField label="Lead Target">
             <Input type="number" min={1} value={form.lead_target} onChange={(e) => setForm({ ...form, lead_target: e.target.value })} required />

@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -39,6 +39,18 @@ async def _count_active_admins(db: AsyncSession, exclude_id: int | None = None) 
     return result.scalar_one()
 
 
+@router.get("/engineers", response_model=list[UserResponse])
+async def list_engineers(
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.BD, UserRole.ENGINEER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Active engineers — accessible to BD/engineers for assignment & issue forms."""
+    result = await db.execute(
+        select(User).where(User.role == UserRole.ENGINEER, User.is_active.is_(True)).order_by(User.full_name)
+    )
+    return result.scalars().all()
+
+
 @router.get("", response_model=list[UserResponse])
 async def list_users(
     role: str | None = None,
@@ -52,9 +64,20 @@ async def list_users(
         query = query.where(User.role == role)
     if is_active is not None:
         query = query.where(User.is_active == is_active)
-    if search:
-        pattern = f"%{search}%"
-        query = query.where(or_(User.full_name.ilike(pattern), User.email.ilike(pattern), User.employee_id.ilike(pattern)))
+    if search and search.strip():
+        # Token-based multi-field search: every token must match some field.
+        for token in search.split():
+            p = f"%{token}%"
+            query = query.where(
+                or_(
+                    User.full_name.ilike(p),
+                    User.email.ilike(p),
+                    User.employee_id.ilike(p),
+                    User.devsinc_id.ilike(p),
+                    User.team_lead_name.ilike(p),
+                    cast(User.role, String).ilike(p),
+                )
+            )
     result = await db.execute(query.order_by(User.full_name))
     return result.scalars().all()
 

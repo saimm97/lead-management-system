@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Button, Input, Select, Textarea, FormField, Card, Spinner } from "@/components/ui";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { CalendarDays, Link2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 
 interface Status { configured: boolean; connected: boolean; google_email: string | null }
@@ -147,10 +148,13 @@ export default function CalendarPage() {
           <form onSubmit={sendInvite} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField label="Engineer">
-                <Select value={form.engineer_id} onChange={(e) => setForm({ ...form, engineer_id: e.target.value })} required>
-                  <option value="">Select engineer…</option>
-                  {engineers.map((eng) => <option key={eng.id} value={eng.id}>{eng.full_name}{eng.devsinc_id ? ` (${eng.devsinc_id})` : ""}</option>)}
-                </Select>
+                <SearchableSelect
+                  value={form.engineer_id}
+                  onChange={(v) => setForm({ ...form, engineer_id: v })}
+                  options={engineers.map((eng) => ({ value: String(eng.id), label: eng.full_name, hint: eng.devsinc_id }))}
+                  placeholder="Select engineer…"
+                  searchPlaceholder="Search engineer name…"
+                />
               </FormField>
               <FormField label="Title">
                 <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Interview prep call" required />

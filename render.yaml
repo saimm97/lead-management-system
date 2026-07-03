@@ -1,0 +1,54 @@
+# Render Blueprint — deploys the LeadPro FastAPI backend on the FREE web-service tier.
+# Use with a free Neon Postgres DB (set DATABASE_URL below). Frontend stays on Vercel.
+#
+# Deploy: push this repo, then in Render → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: leadpro-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # --- Database: paste your Neon pooled connection string (postgres://...) ---
+      - key: DATABASE_URL
+        sync: false
+      # --- Auth: JWT secret is auto-generated; change admin creds after first login ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@leadpro.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      # --- CORS: your deployed frontend URL(s) ---
+      - key: FRONTEND_URL
+        sync: false                      # e.g. https://your-app.vercel.app
+      - key: CORS_ORIGINS
+        sync: false                      # comma-separated; include the Vercel URL
+      - key: CORS_ORIGIN_REGEX
+        value: "https://.*\\.vercel\\.app"   # allow Vercel preview deploys (optional)
+      # --- LLM (CV Optimizer) — optional; leave blank to disable ---
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      # --- Email (optional; leave blank to disable outbound email) ---
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      # --- Google Calendar (optional) ---
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false                      # https://<this-service>.onrender.com/api/calendar/callback

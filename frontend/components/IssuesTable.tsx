@@ -37,6 +37,10 @@ function issueColumns(onSelect: (issue: Issue) => void): TableColumn<Issue>[] {
       id: "lead", label: "Lead", minWidth: COL_MIN.sm, getSortValue: (i) => i.related_lead_id || 0,
       render: (i) => i.related_lead_id ? <Link href={`/leads/${i.related_lead_id}`} className="text-brand-600 hover:underline">#{i.related_lead_id}</Link> : "—",
     },
+    {
+      id: "engineer", label: "Engineer", minWidth: COL_MIN.md, getSortValue: (i) => i.related_engineer_name || "",
+      className: "text-slate-600", render: (i) => i.related_engineer_name || "—",
+    },
     { id: "manager", label: "Manager", minWidth: COL_MIN.md, getSortValue: (i) => i.assigned_manager_name || "", className: "text-slate-600", render: (i) => i.assigned_manager_name || "—" },
     {
       id: "actions", label: "Actions", minWidth: COL_MIN.actions, sortable: false,

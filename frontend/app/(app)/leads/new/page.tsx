@@ -7,14 +7,16 @@ import { api } from "@/lib/api";
 import { User } from "@/lib/types";
 import { PageHeader } from "@/components/PageHeader";
 import { LeadStatusEditor } from "@/components/LeadStatusEditor";
+import { CreatableSelect } from "@/components/CreatableSelect";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button, Input, Select, Textarea, Card, FormField, EmptyState } from "@/components/ui";
-import { engineerOptionLabel } from "@/lib/engineer";
 import { ArrowLeft } from "lucide-react";
 
 export default function NewLeadPage() {
   const [user, setUser] = useState<User | null>(null);
   const [engineers, setEngineers] = useState<User[]>([]);
   const [profiles, setProfiles] = useState<{ id: number; full_name: string }[]>([]);
+  const [jobSources, setJobSources] = useState<string[]>([]);
   const [form, setForm] = useState({
     company: "", job_title: "", job_source: "Jobright", primary_tech: "",
     technologies: "", assigned_engineer_id: "", profile_id: "", notes: "",
@@ -28,8 +30,17 @@ export default function NewLeadPage() {
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) setUser(JSON.parse(stored));
-    api<User[]>("/users").then((users) => setEngineers(users.filter((u) => u.role === "engineer")));
+    // /users/engineers is accessible to BD too (unlike /users), so the dropdown always populates.
+    api<User[]>("/users/engineers").then(setEngineers).catch(() => setEngineers([]));
+    api<{ label: string }[]>("/leads/dropdown-options?category=job_source")
+      .then((opts) => setJobSources(opts.map((o) => o.label)))
+      .catch(() => setJobSources(["Jobright", "Upwork", "sforcejobs", "LinkedIn", "Referral", "Cold Call"]));
   }, []);
+
+  const createJobSource = async (label: string) => {
+    await api("/leads/dropdown-options", { method: "POST", body: JSON.stringify({ category: "job_source", label }) });
+    setJobSources((prev) => [...prev, label]);
+  };
 
   useEffect(() => {
     if (user && ["admin", "manager"].includes(user.role)) {
@@ -78,19 +89,26 @@ export default function NewLeadPage() {
             <FormField label="Job Title"><Input value={form.job_title} onChange={(e) => setForm({ ...form, job_title: e.target.value })} required /></FormField>
           </div>
           <FormField label="Job Source">
-            <Select value={form.job_source} onChange={(e) => setForm({ ...form, job_source: e.target.value })}>
-              {["Jobright", "Upwork", "sforcejobs", "LinkedIn", "Referral", "Cold Call"].map((s) => <option key={s} value={s}>{s}</option>)}
-            </Select>
+            <CreatableSelect
+              value={form.job_source}
+              onChange={(v) => setForm({ ...form, job_source: v })}
+              options={jobSources}
+              onCreate={createJobSource}
+              placeholder="Select a source…"
+            />
           </FormField>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Primary Tech"><Input placeholder="e.g. MERN" value={form.primary_tech} onChange={(e) => setForm({ ...form, primary_tech: e.target.value })} /></FormField>
             <FormField label="Technologies"><Input placeholder="Comma-separated" value={form.technologies} onChange={(e) => setForm({ ...form, technologies: e.target.value })} /></FormField>
           </div>
           <FormField label="Assign Engineer">
-            <Select value={form.assigned_engineer_id} onChange={(e) => setForm({ ...form, assigned_engineer_id: e.target.value })}>
-              <option value="">Optional</option>
-              {engineers.map((e) => <option key={e.id} value={e.id}>{engineerOptionLabel(e.full_name, e.devsinc_id)}</option>)}
-            </Select>
+            <SearchableSelect
+              value={form.assigned_engineer_id}
+              onChange={(v) => setForm({ ...form, assigned_engineer_id: v })}
+              options={engineers.map((e) => ({ value: String(e.id), label: e.full_name, hint: e.devsinc_id || e.employee_id }))}
+              placeholder="Optional — search engineers…"
+              searchPlaceholder="Search engineer name…"
+            />
           </FormField>
           {profiles.length > 0 && (
             <FormField label="Profile">

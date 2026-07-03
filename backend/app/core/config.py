@@ -21,11 +21,17 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     from_email: str = "reports@yourcompany.com"
     llm_api_key: str = ""
-    llm_base_url: str = ""
+    # OpenAI-compatible endpoint. Zhipu GLM default; override LLM_BASE_URL/LLM_MODEL as needed.
+    llm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    llm_model: str = "glm-4.5"
     admin_email: str = "admin@leadpro.com"
     admin_password: str = "admin123"
     admin_name: str = "System Admin"
     frontend_url: str = "http://localhost:3000"
+    # Comma-separated allowed origins for CORS (add your deployed frontend URL).
+    cors_origins: str = "http://localhost:3000"
+    # Optional regex to allow dynamic origins, e.g. Vercel previews: https://.*\.vercel\.app
+    cors_origin_regex: str = ""
 
     # Google Calendar OAuth (leave blank to disable the integration)
     google_client_id: str = ""

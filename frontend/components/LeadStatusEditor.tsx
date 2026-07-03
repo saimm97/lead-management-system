@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { CreatableSelect } from "./CreatableSelect";
-import { Button, FormField, Select, Textarea } from "./ui";
+import { Button, FormField, Textarea } from "./ui";
 
 export interface StatusConfigRow {
   id: number;
@@ -48,27 +48,36 @@ export function LeadStatusEditor({
   const [config, setConfig] = useState<StatusConfigRow[]>([]);
   const [interviewNumbers, setInterviewNumbers] = useState<string[]>([]);
   const [interviewRounds, setInterviewRounds] = useState<string[]>([]);
+  const [phaseOptions, setPhaseOptions] = useState<string[]>([]);
+  const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const loadOptions = async () => {
-    const [cfg, nums, rounds] = await Promise.all([
+    const [cfg, nums, rounds, phs, tps] = await Promise.all([
       api<StatusConfigRow[]>("/leads/status-config"),
       api<{ label: string }[]>("/leads/dropdown-options?category=interview_number"),
       api<{ label: string }[]>("/leads/dropdown-options?category=interview_round"),
+      api<{ label: string }[]>("/leads/dropdown-options?category=lead_phase").catch(() => []),
+      api<{ label: string }[]>("/leads/dropdown-options?category=lead_type").catch(() => []),
     ]);
     setConfig(cfg);
     setInterviewNumbers(nums.map((n) => n.label));
     setInterviewRounds(rounds.map((r) => r.label));
+    setPhaseOptions(phs.map((p) => p.label));
+    setTypeOptions(tps.map((t) => t.label));
   };
 
   useEffect(() => {
     loadOptions();
   }, []);
 
-  const phases = useMemo(() => [...new Set(config.map((c) => c.phase))], [config]);
+  const phases = useMemo(
+    () => [...new Set([...config.map((c) => c.phase), ...phaseOptions])],
+    [config, phaseOptions]
+  );
   const types = useMemo(
-    () => [...new Set(config.filter((c) => c.phase === form.phase).map((c) => c.type))],
-    [config, form.phase]
+    () => [...new Set([...config.filter((c) => c.phase === form.phase).map((c) => c.type), ...typeOptions])],
+    [config, form.phase, typeOptions]
   );
   const statuses = useMemo(
     () => config.filter((c) => c.phase === form.phase && c.type === form.type).map((c) => c.status),
@@ -100,6 +109,18 @@ export function LeadStatusEditor({
     await loadOptions();
   };
 
+  const createPhase = async (label: string) => {
+    await api("/leads/dropdown-options", { method: "POST", body: JSON.stringify({ category: "lead_phase", label }) });
+    setPhaseOptions((prev) => [...prev, label]);
+    setPhase(label);
+  };
+
+  const createType = async (label: string) => {
+    await api("/leads/dropdown-options", { method: "POST", body: JSON.stringify({ category: "lead_type", label }) });
+    setTypeOptions((prev) => [...prev, label]);
+    setType(label);
+  };
+
   const createInterviewNumber = async (label: string) => {
     await api("/leads/dropdown-options", { method: "POST", body: JSON.stringify({ category: "interview_number", label }) });
     setInterviewNumbers((prev) => [...prev, label]);
@@ -124,14 +145,22 @@ export function LeadStatusEditor({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <FormField label="Phase">
-          <Select value={form.phase} onChange={(e) => setPhase(e.target.value)}>
-            {phases.map((p) => <option key={p} value={p}>{p}</option>)}
-          </Select>
+          <CreatableSelect
+            value={form.phase}
+            onChange={setPhase}
+            options={phases}
+            onCreate={createPhase}
+            placeholder="Select phase…"
+          />
         </FormField>
         <FormField label="Type">
-          <Select value={form.type} onChange={(e) => setType(e.target.value)}>
-            {types.map((t) => <option key={t} value={t}>{t}</option>)}
-          </Select>
+          <CreatableSelect
+            value={form.type}
+            onChange={setType}
+            options={types}
+            onCreate={createType}
+            placeholder="Select type…"
+          />
         </FormField>
         <FormField label="Status">
           <CreatableSelect

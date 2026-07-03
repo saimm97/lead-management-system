@@ -54,6 +54,14 @@ DROPDOWN_SEED = {
         "Drugs Lead",
         "Betting App Lead",
     ],
+    "job_source": [
+        "Jobright",
+        "Upwork",
+        "sforcejobs",
+        "LinkedIn",
+        "Referral",
+        "Cold Call",
+    ],
 }
 
 

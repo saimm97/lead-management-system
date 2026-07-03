@@ -22,6 +22,7 @@ class Issue(Base):
     assigned_manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     related_lead_id: Mapped[int | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
     related_profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"), nullable=True)
+    related_engineer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

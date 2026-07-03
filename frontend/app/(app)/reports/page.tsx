@@ -4,42 +4,65 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { MultiChart } from "@/components/ChartsLazy";
 import { ResourceLeadsReport } from "@/components/ResourceLeadsReport";
+import { DailyReport } from "@/components/DailyReport";
+import { EngineerReport } from "@/components/EngineerReport";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, Tabs, Spinner } from "@/components/ui";
+import { Card, Tabs, Spinner, cn } from "@/components/ui";
 
-type ReportTab = "weekly" | "monthly" | "resource";
+type ReportGroup = "bd" | "engineers";
+type BdTab = "daily" | "resource" | "weekly" | "monthly";
 
 const toData = (obj: Record<string, number>) =>
   Object.entries(obj).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
 
 export default function ReportsPage() {
-  const [tab, setTab] = useState<ReportTab>("monthly");
+  const [group, setGroup] = useState<ReportGroup>("bd");
+  const [tab, setTab] = useState<BdTab>("daily");
   const [weekly, setWeekly] = useState<{ new_leads: number; overdue_followups: number; open_issues: Record<string, number>; target_progress: { engineer: string; devsinc_id?: string | null; target: number; tech: string }[] } | null>(null);
   const [monthly, setMonthly] = useState<{ outcomes: Record<string, number>; funnel: { stage: string; count: number }[]; source_performance: { source: string; count: number }[]; profile_health: Record<string, number>; issues_summary: Record<string, number> } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (tab === "resource") { setLoading(false); return; }
+    if (group !== "bd" || tab === "resource" || tab === "daily") { setLoading(false); return; }
     setLoading(true);
     if (tab === "weekly") {
       api<NonNullable<typeof weekly>>("/reports/weekly").then(setWeekly).finally(() => setLoading(false));
     } else {
       api<NonNullable<typeof monthly>>("/reports/monthly").then(setMonthly).finally(() => setLoading(false));
     }
-  }, [tab]);
+  }, [group, tab]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports" description="Performance analytics and per-resource lead assignments" />
-      <Tabs
-        tabs={[{ id: "weekly", label: "Weekly Report" }, { id: "monthly", label: "Monthly Report" }, { id: "resource", label: "Resource Leads" }]}
-        active={tab}
-        onChange={(id) => setTab(id as ReportTab)}
-      />
+      <PageHeader title="Reports" description="BD and engineer performance analytics" />
 
-      {tab === "resource" ? (
-        <ResourceLeadsReport />
-      ) : loading ? (
+      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-card">
+        {([{ id: "bd", label: "BD Reports" }, { id: "engineers", label: "Engineers Report" }] as const).map((g) => (
+          <button
+            key={g.id}
+            onClick={() => setGroup(g.id)}
+            className={cn("rounded-md px-4 py-1.5 text-sm font-medium transition", group === g.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {group === "engineers" ? (
+        <EngineerReport />
+      ) : (
+        <>
+          <Tabs
+            tabs={[{ id: "daily", label: "Daily Report" }, { id: "resource", label: "Resource Leads" }, { id: "weekly", label: "Weekly Report" }, { id: "monthly", label: "Monthly Report" }]}
+            active={tab}
+            onChange={(id) => setTab(id as BdTab)}
+          />
+
+          {tab === "daily" ? (
+            <DailyReport />
+          ) : tab === "resource" ? (
+            <ResourceLeadsReport />
+          ) : loading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : tab === "weekly" && weekly ? (
         <div className="space-y-6">
@@ -118,7 +141,9 @@ export default function ReportsPage() {
             ))}
           </div>
         </div>
-      ) : null}
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

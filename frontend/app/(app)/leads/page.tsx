@@ -6,14 +6,32 @@ import { api, apiUpload, downloadTemplate, downloadApiFile } from "@/lib/api";
 import { exportCsv } from "@/lib/csv";
 import { Lead, Paginated, User } from "@/lib/types";
 import { LeadsTable } from "@/components/LeadsTable";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { PageHeader } from "@/components/PageHeader";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { BulkUpdateModal, BulkField } from "@/components/BulkUpdateModal";
 import { useBulkSelect } from "@/hooks/useBulkSelect";
 import { FilterPanel, FilterField } from "@/components/FilterPanel";
 import { Button, Select, Input, Modal, Tabs, Spinner } from "@/components/ui";
-import { Plus, Filter, Upload, Download } from "lucide-react";
+import { Plus, Filter, Upload, Download, Search, X } from "lucide-react";
 import { SortDirection } from "@/lib/tableUtils";
+
+const SEARCH_FIELDS: { value: string; label: string }[] = [
+  { value: "all", label: "All fields" },
+  { value: "id", label: "Lead ID" },
+  { value: "company", label: "Company" },
+  { value: "job_title", label: "Job Title" },
+  { value: "job_source", label: "Source" },
+  { value: "primary_tech", label: "Primary Tech" },
+  { value: "technologies", label: "Technologies" },
+  { value: "phase", label: "Phase" },
+  { value: "type", label: "Type" },
+  { value: "status", label: "Status" },
+  { value: "interview_round", label: "Interview Round" },
+  { value: "engineer", label: "Engineer" },
+  { value: "bd", label: "BD" },
+  { value: "notes", label: "Notes" },
+];
 
 const LEAD_BULK_FIELDS: BulkField[] = [
   { key: "phase", label: "Phase", type: "select", options: ["Applied", "Screening", "Interview", "Offer", "Closed"].map((v) => ({ value: v, label: v })) },
@@ -58,9 +76,11 @@ export default function LeadsPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [filters, setFilters] = useState({
     job_source: "", phase: "", type: "", status: "", primary_tech: "",
-    interview_number: "", interview_round: "", company: "",
+    interview_number: "", interview_round: "", search: "",
     assigned_engineer_id: "", bd_id: "",
   });
+  const [searchInput, setSearchInput] = useState("");
+  const [searchField, setSearchField] = useState("all");
   const [statusConfig, setStatusConfig] = useState<{ phase: string; type: string; status: string }[]>([]);
   const [interviewNumbers, setInterviewNumbers] = useState<string[]>([]);
   const [interviewRounds, setInterviewRounds] = useState<string[]>([]);
@@ -78,7 +98,10 @@ export default function LeadsPage() {
     if (filters.primary_tech) params.set("primary_tech", filters.primary_tech);
     if (filters.interview_number) params.set("interview_number", filters.interview_number);
     if (filters.interview_round) params.set("interview_round", filters.interview_round);
-    if (filters.company) params.set("company", filters.company);
+    if (filters.search) {
+      params.set("search", filters.search);
+      if (searchField !== "all") params.set("search_field", searchField);
+    }
     if (filters.assigned_engineer_id) params.set("assigned_engineer_id", filters.assigned_engineer_id);
     if (filters.bd_id) params.set("bd_id", filters.bd_id);
     params.set("sort_by", sort.columnId);
@@ -91,6 +114,7 @@ export default function LeadsPage() {
   const filterParams = () => {
     const params = new URLSearchParams({ scope });
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+    if (filters.search && searchField !== "all") params.set("search_field", searchField);
     params.set("sort_by", sort.columnId);
     params.set("sort_dir", sort.direction);
     return params;
@@ -147,11 +171,20 @@ export default function LeadsPage() {
 
   useEffect(() => {
     load();
-  }, [scope, page, pageSize, filters, sort]);
+  }, [scope, page, pageSize, filters, sort, searchField]);
 
   useEffect(() => {
     bulk.clear();
-  }, [scope, page, pageSize, filters, sort]);
+  }, [scope, page, pageSize, filters, sort, searchField]);
+
+  // Debounce the search box so we don't query on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFilters((f) => (f.search === searchInput ? f : { ...f, search: searchInput }));
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const showHistory = async (id: number) => {
     setHistoryLeadId(id);
@@ -229,15 +262,32 @@ export default function LeadsPage() {
 
       <Tabs tabs={tabs} active={scope} onChange={(id) => { setScope(id as "my" | "subordinate"); setPage(1); }} />
 
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={searchField === "all" ? "Search all fields — company, title, tech, status, engineer, BD…" : `Search by ${SEARCH_FIELDS.find((f) => f.value === searchField)?.label}…`}
+            className="pl-10"
+          />
+          {searchInput && (
+            <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" title="Clear">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <Select value={searchField} onChange={(e) => { setSearchField(e.target.value); setPage(1); }} className="sm:w-48" title="Search within a specific column">
+          {SEARCH_FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </Select>
+      </div>
+
       {canBulk && (
         <BulkActionBar count={bulk.count} onUpdate={() => setShowBulk(true)} onClear={bulk.clear} />
       )}
 
       {showFilters && (
         <FilterPanel columns={5}>
-          <FilterField label="Company / Title">
-            <Input value={filters.company} onChange={(e) => setFilters({ ...filters, company: e.target.value })} placeholder="Search company or title" />
-          </FilterField>
           <FilterField label="Source">
             <Select value={filters.job_source} onChange={(e) => setFilters({ ...filters, job_source: e.target.value })}>
               <option value="">All</option>
@@ -279,18 +329,24 @@ export default function LeadsPage() {
           </FilterField>
           {engineers.length > 0 && (
             <FilterField label="Engineer">
-              <Select value={filters.assigned_engineer_id} onChange={(e) => setFilters({ ...filters, assigned_engineer_id: e.target.value })}>
-                <option value="">All</option>
-                {engineers.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-              </Select>
+              <SearchableSelect
+                value={filters.assigned_engineer_id}
+                onChange={(v) => { setFilters({ ...filters, assigned_engineer_id: v }); setPage(1); }}
+                options={engineers.map((e) => ({ value: String(e.id), label: e.full_name, hint: e.devsinc_id || e.employee_id }))}
+                placeholder="All engineers"
+                searchPlaceholder="Search engineer name…"
+              />
             </FilterField>
           )}
           {isManager && (
             <FilterField label="BD">
-              <Select value={filters.bd_id} onChange={(e) => setFilters({ ...filters, bd_id: e.target.value })}>
-                <option value="">All</option>
-                {bds.map((b) => <option key={b.id} value={b.id}>{b.full_name}</option>)}
-              </Select>
+              <SearchableSelect
+                value={filters.bd_id}
+                onChange={(v) => { setFilters({ ...filters, bd_id: v }); setPage(1); }}
+                options={bds.map((b) => ({ value: String(b.id), label: b.full_name, hint: b.employee_id }))}
+                placeholder="All BDs"
+                searchPlaceholder="Search BD name…"
+              />
             </FilterField>
           )}
         </FilterPanel>
@@ -310,18 +366,18 @@ export default function LeadsPage() {
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-card">
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-slate-500">Showing <span className="font-medium">{leads.length}</span> of <span className="font-medium">{total}</span></p>
-          <Select value={String(pageSize)} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="w-28">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-card">
+          <p className="whitespace-nowrap text-sm text-slate-500">Showing <span className="font-medium">{leads.length}</span> of <span className="font-medium">{total}</span></p>
+          <Select value={String(pageSize)} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="w-24">
             <option value="10">10 / page</option>
             <option value="25">25 / page</option>
             <option value="50">50 / page</option>
           </Select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-card">
           <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          <span className="px-2 text-sm">Page {page}</span>
+          <span className="px-1 text-sm">Page {page}</span>
           <Button variant="secondary" size="sm" disabled={page * pageSize >= total} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
       </div>

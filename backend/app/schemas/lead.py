@@ -122,7 +122,7 @@ class StatusConfigResponse(BaseModel):
 
 
 class DropdownOptionCreate(BaseModel):
-    category: str = Field(pattern="^(interview_number|interview_round|lead_issue_type)$")
+    category: str = Field(pattern="^(interview_number|interview_round|lead_issue_type|job_source|lead_phase|lead_type)$")
     label: str = Field(min_length=1, max_length=100)
 
 

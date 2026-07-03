@@ -12,6 +12,7 @@ class IssueCreate(BaseModel):
     priority: IssuePriority = IssuePriority.MEDIUM
     related_lead_id: int | None = None
     related_profile_id: int | None = None
+    related_engineer_id: int | None = None
 
 
 class IssueUpdate(BaseModel):
@@ -53,6 +54,8 @@ class IssueResponse(BaseModel):
     assigned_manager_name: str | None = None
     related_lead_id: int | None
     related_profile_id: int | None
+    related_engineer_id: int | None = None
+    related_engineer_name: str | None = None
     resolution_note: str | None
     created_at: datetime
     updated_at: datetime
