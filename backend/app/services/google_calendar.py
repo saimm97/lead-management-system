@@ -9,9 +9,15 @@ and set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in the environment.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from app.core.config import settings
+
+# Google often returns the granted scopes in a different order (or adds `openid`),
+# which makes oauthlib raise "Scope has changed" during token exchange. Relaxing this
+# lets the callback succeed instead of 500-ing.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
@@ -40,7 +46,7 @@ def _client_config() -> dict:
     }
 
 
-def _build_flow(state: str | None = None):
+def _build_flow(state: str | None = None, code_verifier: str | None = None):
     try:
         from google_auth_oauthlib.flow import Flow
     except ImportError as exc:  # pragma: no cover - depends on optional libs
@@ -48,18 +54,26 @@ def _build_flow(state: str | None = None):
             "Google client libraries are not installed. Run: "
             "pip install google-api-python-client google-auth google-auth-oauthlib"
         ) from exc
-    return Flow.from_client_config(
+    flow = Flow.from_client_config(
         _client_config(),
         scopes=SCOPES,
         redirect_uri=settings.google_redirect_uri,
         state=state,
     )
+    # google-auth-oauthlib enables PKCE by default and generates its own code_verifier
+    # per Flow instance. Since the auth-url request and the callback request are two
+    # separate Flow objects (this is a stateless web backend, not a single in-memory
+    # session), we must pin the SAME verifier on both — otherwise Google's token
+    # endpoint rejects the exchange with "invalid_grant: Missing code verifier".
+    if code_verifier:
+        flow.code_verifier = code_verifier
+    return flow
 
 
-def authorization_url(state: str) -> str:
+def authorization_url(state: str, code_verifier: str) -> str:
     if not is_configured():
         raise CalendarError("Google Calendar is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.")
-    flow = _build_flow(state=state)
+    flow = _build_flow(state=state, code_verifier=code_verifier)
     url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -68,11 +82,11 @@ def authorization_url(state: str) -> str:
     return url
 
 
-def exchange_code(code: str) -> dict:
+def exchange_code(code: str, code_verifier: str) -> dict:
     """Exchange an authorization code for tokens; returns a serialisable dict."""
     if not is_configured():
         raise CalendarError("Google Calendar is not configured.")
-    flow = _build_flow()
+    flow = _build_flow(code_verifier=code_verifier)
     flow.fetch_token(code=code)
     creds = flow.credentials
     email = _fetch_email(creds)
