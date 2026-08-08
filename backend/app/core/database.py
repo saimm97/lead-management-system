@@ -31,6 +31,10 @@ def _normalize_db_url(url: str) -> tuple[str, dict]:
             if sslmode and sslmode not in ("disable", "allow"):
                 connect_args["ssl"] = True
             url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
+        # Neon/Supabase pooled endpoints run PgBouncer in transaction mode, which is
+        # incompatible with asyncpg's prepared-statement cache. Disabling it makes the
+        # pooled connection string work reliably.
+        connect_args["statement_cache_size"] = 0
     return url, connect_args
 
 

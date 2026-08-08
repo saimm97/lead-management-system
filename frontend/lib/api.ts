@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Strip any trailing slash so `${API_URL}/api/...` never produces a double slash (//api → 404).
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
