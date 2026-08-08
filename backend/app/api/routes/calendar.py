@@ -1,4 +1,6 @@
+import secrets
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -56,10 +58,13 @@ async def invite_engineers(
 async def auth_url(user: User = Depends(require_roles(*INVITE_ROLES)), db: AsyncSession = Depends(get_db)):
     if not gcal.is_configured():
         raise HTTPException(status_code=503, detail="Google Calendar is not configured on the server.")
-    # Encode the user id in a signed state token so the callback can identify them.
-    state = create_access_token({"sub": str(user.id), "purpose": "gcal_oauth"})
+    # Encode the user id (and PKCE code_verifier) in a signed state token so the
+    # callback — a separate request/Flow instance — can identify the user and finish
+    # the same PKCE exchange that was started here.
+    code_verifier = secrets.token_urlsafe(64)
+    state = create_access_token({"sub": str(user.id), "purpose": "gcal_oauth", "cv": code_verifier})
     try:
-        return AuthUrlResponse(url=gcal.authorization_url(state))
+        return AuthUrlResponse(url=gcal.authorization_url(state, code_verifier))
     except gcal.CalendarError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
@@ -74,25 +79,31 @@ async def oauth_callback(
     if not payload or payload.get("purpose") != "gcal_oauth" or not payload.get("sub"):
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
     user_id = int(payload["sub"])
+    code_verifier = payload.get("cv")
+    if not code_verifier:
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/calendar?error={quote('Expired or invalid OAuth session, please try connecting again')}"
+        )
     try:
-        tokens = gcal.exchange_code(code)
-    except gcal.CalendarError as exc:
-        return RedirectResponse(url=f"{settings.frontend_url}/calendar?error={exc}")
+        tokens = gcal.exchange_code(code, code_verifier)
 
-    cred = await _get_credential(db, user_id)
-    if cred is None:
-        cred = GoogleCredential(user_id=user_id)
-        db.add(cred)
-    cred.access_token = tokens["access_token"]
-    if tokens.get("refresh_token"):
-        cred.refresh_token = tokens["refresh_token"]
-    cred.token_uri = tokens["token_uri"]
-    cred.scopes = tokens["scopes"]
-    cred.expiry = tokens["expiry"]
-    cred.google_email = tokens.get("google_email")
-    cred.updated_at = datetime.now(timezone.utc)
-    await log_audit(db, user_id, "connect", "google_calendar")
-    await db.commit()
+        cred = await _get_credential(db, user_id)
+        if cred is None:
+            cred = GoogleCredential(user_id=user_id)
+            db.add(cred)
+        cred.access_token = tokens["access_token"]
+        if tokens.get("refresh_token"):
+            cred.refresh_token = tokens["refresh_token"]
+        cred.token_uri = tokens["token_uri"]
+        cred.scopes = tokens["scopes"]
+        cred.expiry = tokens["expiry"]
+        cred.google_email = tokens.get("google_email")
+        cred.updated_at = datetime.now(timezone.utc)
+        await log_audit(db, user_id, "connect", "google_calendar")
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — never 500 the OAuth redirect; show the error on the page
+        msg = str(exc).replace("\n", " ")[:200] or "Google connection failed"
+        return RedirectResponse(url=f"{settings.frontend_url}/calendar?error={quote(msg)}")
     return RedirectResponse(url=f"{settings.frontend_url}/calendar?connected=1")
 
 

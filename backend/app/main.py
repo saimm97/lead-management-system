@@ -30,7 +30,11 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_number VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_round VARCHAR(100)"))
         await conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
-    await seed_database()
+    # Seeding is best-effort demo data — never let it crash startup.
+    try:
+        await seed_database()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] seed_database skipped (non-fatal): {exc}")
     yield
 
 
@@ -63,6 +67,11 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
 app.include_router(cv.router, prefix="/api")
+
+
+@app.get("/")
+async def root():
+    return {"service": "LeadPro API", "status": "ok", "docs": "/docs", "health": "/api/health"}
 
 
 @app.get("/api/health")

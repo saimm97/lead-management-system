@@ -65,6 +65,24 @@ DROPDOWN_SEED = {
 }
 
 
+async def _get_or_create_user(db, email: str, **kwargs) -> User:
+    """Idempotent: return the existing user (by email), or the user that already holds
+    the target employee_id, otherwise create it. Prevents unique-constraint crashes when
+    the DB is partially seeded (e.g. a row was manually deleted)."""
+    existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if existing:
+        return existing
+    emp = kwargs.get("employee_id")
+    if emp:
+        clash = (await db.execute(select(User).where(User.employee_id == emp))).scalar_one_or_none()
+        if clash:
+            return clash
+    user = User(email=email, **kwargs)
+    db.add(user)
+    await db.flush()
+    return user
+
+
 async def seed_database():
     async with AsyncSessionLocal() as db:
         tenant_result = await db.execute(select(Tenant).where(Tenant.slug == "devsinc"))
@@ -74,96 +92,72 @@ async def seed_database():
             db.add(tenant)
             await db.flush()
 
-        result = await db.execute(select(User).where(User.email == settings.admin_email))
-        if not result.scalar_one_or_none():
-            admin = User(
-                email=settings.admin_email,
-                password_hash=hash_password(settings.admin_password),
-                full_name=settings.admin_name,
-                employee_id="1",
-                role=UserRole.ADMIN,
-                tenant_id=tenant.id,
-            )
-            db.add(admin)
-            await db.flush()
+        # Each seed user is get-or-create, so re-running (or a partially cleared DB) is safe.
+        await _get_or_create_user(
+            db, settings.admin_email,
+            password_hash=hash_password(settings.admin_password),
+            full_name=settings.admin_name, employee_id="1",
+            role=UserRole.ADMIN, tenant_id=tenant.id,
+        )
+        eng_manager = await _get_or_create_user(
+            db, "mahroz.khan@devsinc.com",
+            password_hash=hash_password("manager123"), full_name="Mahroz Khan",
+            employee_id="M100", role=UserRole.MANAGER,
+            manager_type=ManagerType.ENGINEERING_MANAGER, tenant_id=tenant.id,
+        )
+        bd_manager = await _get_or_create_user(
+            db, "bd.manager@devsinc.com",
+            password_hash=hash_password("manager123"), full_name="Sarah BD Manager",
+            employee_id="M200", role=UserRole.MANAGER,
+            manager_type=ManagerType.BD_MANAGER, tenant_id=tenant.id,
+        )
+        bd = await _get_or_create_user(
+            db, "bd@leadpro.com",
+            password_hash=hash_password("bd123456"), full_name="Shehryar Shahid",
+            employee_id="2106", role=UserRole.BD,
+            manager_id=bd_manager.id, tenant_id=tenant.id,
+        )
+        engineer = await _get_or_create_user(
+            db, "engineer@leadpro.com",
+            password_hash=hash_password("engineer123"), full_name="Muhammad Saim Malik",
+            employee_id="411", devsinc_id="411", role=UserRole.ENGINEER,
+            manager_id=eng_manager.id, tenant_id=tenant.id,
+        )
 
-            eng_manager = User(
-                email="mahroz.khan@devsinc.com",
-                password_hash=hash_password("manager123"),
-                full_name="Mahroz Khan",
-                employee_id="M100",
-                role=UserRole.MANAGER,
-                manager_type=ManagerType.ENGINEERING_MANAGER,
-                tenant_id=tenant.id,
-            )
-            bd_manager = User(
-                email="bd.manager@devsinc.com",
-                password_hash=hash_password("manager123"),
-                full_name="Sarah BD Manager",
-                employee_id="M200",
-                role=UserRole.MANAGER,
-                manager_type=ManagerType.BD_MANAGER,
-                tenant_id=tenant.id,
-            )
-            db.add_all([eng_manager, bd_manager])
-            await db.flush()
-
-            bd = User(
-                email="bd@leadpro.com",
-                password_hash=hash_password("bd123456"),
-                full_name="Shehryar Shahid",
-                employee_id="2106",
-                role=UserRole.BD,
-                manager_id=bd_manager.id,
-                tenant_id=tenant.id,
-            )
-            engineer = User(
-                email="engineer@leadpro.com",
-                password_hash=hash_password("engineer123"),
-                full_name="Muhammad Saim Malik",
-                employee_id="411",
-                devsinc_id="411",
-                role=UserRole.ENGINEER,
-                manager_id=eng_manager.id,
-                tenant_id=tenant.id,
-            )
-            db.add_all([bd, engineer])
-            await db.flush()
-
-            config_result = await db.execute(select(LeadStatusConfig).limit(1))
-            if not config_result.scalar_one_or_none():
-                for phase, type_, status, terminal, bucket, order in STATUS_SEED:
-                    db.add(
-                        LeadStatusConfig(
-                            phase=phase, type=type_, status=status,
-                            is_terminal=terminal, report_bucket=bucket, sort_order=order,
-                        )
+        config_result = await db.execute(select(LeadStatusConfig).limit(1))
+        if not config_result.scalar_one_or_none():
+            for phase, type_, status, terminal, bucket, order in STATUS_SEED:
+                db.add(
+                    LeadStatusConfig(
+                        phase=phase, type=type_, status=status,
+                        is_terminal=terminal, report_bucket=bucket, sort_order=order,
                     )
+                )
 
-            dropdown_result = await db.execute(select(LeadDropdownOption).limit(1))
-            if not dropdown_result.scalar_one_or_none():
-                order = 0
-                for category, labels in DROPDOWN_SEED.items():
-                    for label in labels:
-                        order += 1
-                        db.add(LeadDropdownOption(category=category, label=label, sort_order=order))
+        dropdown_result = await db.execute(select(LeadDropdownOption).limit(1))
+        if not dropdown_result.scalar_one_or_none():
+            order = 0
+            for category, labels in DROPDOWN_SEED.items():
+                for label in labels:
+                    order += 1
+                    db.add(LeadDropdownOption(category=category, label=label, sort_order=order))
 
-            profile_result = await db.execute(select(Profile).limit(1))
-            if not profile_result.scalar_one_or_none():
-                profiles = [
-                    Profile(tenant_id=tenant.id, full_name="Harry Ahmad", linkedin_url="https://linkedin.com/in/harry", linkedin_verified=True, github_url="https://github.com/harry", github_present=True, primary_tech_stack="MERN", assigned_engineer_id=engineer.id),
-                    Profile(tenant_id=tenant.id, full_name="Sherris Aiden", linkedin_url="https://linkedin.com/in/sherris", linkedin_verified=False, github_present=False, primary_tech_stack="Python", assigned_engineer_id=engineer.id),
-                    Profile(tenant_id=tenant.id, full_name="John Doe", linkedin_url=None, linkedin_verified=False, github_url="https://github.com/johndoe", github_present=True, primary_tech_stack="Ruby on Rails"),
-                ]
-                db.add_all(profiles)
-                await db.flush()
+        profile_result = await db.execute(select(Profile).limit(1))
+        if not profile_result.scalar_one_or_none():
+            profiles = [
+                Profile(tenant_id=tenant.id, full_name="Harry Ahmad", linkedin_url="https://linkedin.com/in/harry", linkedin_verified=True, github_url="https://github.com/harry", github_present=True, primary_tech_stack="MERN", assigned_engineer_id=engineer.id),
+                Profile(tenant_id=tenant.id, full_name="Sherris Aiden", linkedin_url="https://linkedin.com/in/sherris", linkedin_verified=False, github_present=False, primary_tech_stack="Python", assigned_engineer_id=engineer.id),
+                Profile(tenant_id=tenant.id, full_name="John Doe", linkedin_url=None, linkedin_verified=False, github_url="https://github.com/johndoe", github_present=True, primary_tech_stack="Ruby on Rails"),
+            ]
+            db.add_all(profiles)
+            await db.flush()
 
-                leads = [
-                    Lead(tenant_id=tenant.id, company="BrightWave Tech", job_title="Technical Lead - Node.js", job_source="Jobright", technologies=["Node.js", "React", "MongoDB"], primary_tech="MERN", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, assigned_by_bd_id=bd.id, bd_id=bd.id, profile_id=profiles[0].id, phase="Interview", type="HR Interview", status="Introductory HR"),
-                    Lead(tenant_id=tenant.id, company="DataFlow Inc", job_title="Senior Backend Engineer (Django)", job_source="sforcejobs", technologies=["Python", "Django"], primary_tech="Python", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, assigned_by_bd_id=bd.id, bd_id=bd.id, profile_id=profiles[1].id, phase="Interview", type="Technical Interview", status="Technical Q&A"),
-                    Lead(tenant_id=tenant.id, company="CloudScale", job_title="Back-End Python Engineer", job_source="Upwork", technologies=["Python"], primary_tech="Python", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, bd_id=bd.id, phase="Applied", type="JD Sent", status="JD Invite Pending"),
-                ]
-                db.add_all(leads)
+            leads = [
+                Lead(tenant_id=tenant.id, company="BrightWave Tech", job_title="Technical Lead - Node.js", job_source="Jobright", technologies=["Node.js", "React", "MongoDB"], primary_tech="MERN", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, assigned_by_bd_id=bd.id, bd_id=bd.id, profile_id=profiles[0].id, phase="Interview", type="HR Interview", status="Introductory HR"),
+                Lead(tenant_id=tenant.id, company="DataFlow Inc", job_title="Senior Backend Engineer (Django)", job_source="sforcejobs", technologies=["Python", "Django"], primary_tech="Python", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, assigned_by_bd_id=bd.id, bd_id=bd.id, profile_id=profiles[1].id, phase="Interview", type="Technical Interview", status="Technical Q&A"),
+                Lead(tenant_id=tenant.id, company="CloudScale", job_title="Back-End Python Engineer", job_source="Upwork", technologies=["Python"], primary_tech="Python", assigned_engineer_id=engineer.id, cluster_head_id=eng_manager.id, bd_id=bd.id, phase="Applied", type="JD Sent", status="JD Invite Pending"),
+            ]
+            db.add_all(leads)
 
         await db.commit()
 
