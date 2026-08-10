@@ -1,0 +1,60 @@
+name: Commit file limit check
+
+# Fails a push or PR if any single commit touches more than MAX_FILES files.
+# Keeps commits focused/reviewable and catches accidental "add everything"
+# commits (e.g. committing node_modules, build output, or unrelated changes).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-commit-size:
+    runs-on: ubuntu-latest
+    env:
+      MAX_FILES: 14
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine commit range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check file count per commit
+        run: |
+          BASE="${{ steps.range.outputs.base }}"
+          HEAD="${{ steps.range.outputs.head }}"
+
+          # On a brand new branch push, `before` is all-zeros — fall back to
+          # just checking the head commit against its own parent.
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            COMMITS=$(git rev-list "$HEAD" -n 1)
+          else
+            COMMITS=$(git rev-list "$BASE..$HEAD")
+          fi
+
+          FAILED=0
+          for sha in $COMMITS; do
+            COUNT=$(git show --pretty="" --name-only "$sha" | grep -c .)
+            echo "Commit $sha: $COUNT file(s) changed"
+            if [ "$COUNT" -gt "$MAX_FILES" ]; then
+              echo "::error::Commit $sha changes $COUNT files, exceeding the $MAX_FILES-file limit. Split it into smaller commits."
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            exit 1
+          fi

@@ -69,13 +69,13 @@ export default function LoginPage() {
       {/* Left panel — branding */}
       <div className="hidden w-1/2 flex-col justify-between bg-slate-950 p-12 text-white lg:flex">
         <div>
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold shadow-lg shadow-brand-600/40">LP</div>
             <div>
               <h1 className="text-2xl font-bold">LeadPro</h1>
               <p className="text-sm text-slate-400">Business Development Platform</p>
             </div>
-          </div>
+          </Link>
         </div>
         <div className="space-y-8">
           <h2 className="text-4xl font-bold leading-tight tracking-tight">
@@ -105,10 +105,10 @@ export default function LoginPage() {
       <div className="flex w-full flex-col items-center justify-center bg-slate-50 px-6 py-12 lg:w-1/2">
         <div className="w-full max-w-md">
           <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">LP</div>
               <span className="text-xl font-bold text-slate-900">LeadPro</span>
-            </div>
+            </Link>
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
