@@ -10,3 +10,6 @@ dist/
 .venv/
 backend/.venv/
 backend/build/
+*.tsbuildinfo
+trust-policy.json
+/test/
