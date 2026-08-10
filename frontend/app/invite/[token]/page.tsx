@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, setTokens } from "@/lib/api";
 import { Button, Input, FormField, Spinner } from "@/components/ui";
@@ -40,13 +41,13 @@ export default function InvitePage() {
   return (
     <div className="flex min-h-screen">
       <div className="hidden w-1/2 flex-col justify-center bg-slate-950 p-12 text-white lg:flex">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold">LP</div>
           <div>
             <h1 className="text-2xl font-bold">LeadPro</h1>
             <p className="text-sm text-slate-400">Invitation</p>
           </div>
-        </div>
+        </Link>
         <h2 className="mt-12 text-3xl font-bold leading-tight">Complete your setup.</h2>
         <p className="mt-4 max-w-md text-slate-400">You&apos;ve been invited to join LeadPro. Fill in your details below to activate your account.</p>
       </div>
@@ -54,10 +55,10 @@ export default function InvitePage() {
       <div className="flex w-full flex-col items-center justify-center bg-slate-50 px-6 py-12 lg:w-1/2">
         <div className="w-full max-w-md">
           <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">LP</div>
               <span className="text-xl font-bold text-slate-900">LeadPro</span>
-            </div>
+            </Link>
           </div>
           <h2 className="text-2xl font-bold text-slate-900">Complete registration</h2>
           <p className="mt-1 text-sm text-slate-500">Set up your account credentials</p>

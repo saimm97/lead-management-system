@@ -120,7 +120,7 @@ export function Sidebar({ user }: { user: User }) {
   return (
     <aside className="flex h-screen w-[260px] shrink-0 flex-col bg-slate-950 text-white">
       <div className="border-b border-slate-800 px-5 py-6">
-        <div className="flex items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 font-bold text-white shadow-lg shadow-brand-600/30">
             LP
           </div>
@@ -128,7 +128,7 @@ export function Sidebar({ user }: { user: User }) {
             <h1 className="text-lg font-bold tracking-tight">LeadPro</h1>
             <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Business Development</p>
           </div>
-        </div>
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
