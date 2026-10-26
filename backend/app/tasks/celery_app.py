@@ -19,7 +19,19 @@ celery_app.conf.update(
             "task": "app.tasks.reports.generate_monthly_reports",
             "schedule": crontab(hour=8, minute=0, day_of_month=1),
         },
+        "ai-pipeline-ingest": {
+            "task": "app.services.ai_pipeline.ingest_daily",
+            "schedule": crontab(hour=6, minute=0),
+        },
     },
 )
+
+
+@celery_app.task(name="app.services.ai_pipeline.ingest_daily")
+def ingest_ai_pipeline_daily():
+    from app.services.ai_pipeline import run_daily_ingest
+
+    return run_daily_ingest()
+
 
 celery_app.autodiscover_tasks(["app.tasks"])
