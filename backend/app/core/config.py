@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     job_feed_url: str = ""
     # Public Greenhouse board tokens, fetched with the daily job feed.
     greenhouse_boards: str = "stripe,gitlab,airbnb,cloudflare,figma,discord,databricks,robinhood"
+    pipeline_max_age_days: int = 60
+    pipeline_close_after_misses: int = 2
     llm_embedding_model: str = ""
     llm_embedding_dim: int = 1536
     admin_email: str = "admin@leadpro.com"

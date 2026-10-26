@@ -638,6 +638,9 @@ async def ingest_feed(
             today=today,
             default_source="Greenhouse",
         )
+    from app.pipeline.ingest import ingest_boards  # local import: pipeline modules import this file
+
+    inserted += (await ingest_boards(db, today=today, embed=embed)).inserted
     return inserted
 
 
