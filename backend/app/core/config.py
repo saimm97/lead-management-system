@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     greenhouse_boards: str = "stripe,gitlab,airbnb,cloudflare,figma,discord,databricks,robinhood"
     pipeline_max_age_days: int = 60
     pipeline_close_after_misses: int = 2
+    pipeline_refresh_backend: str = "background"  # background | celery
+    pipeline_refresh_cooldown_seconds: int = 300
+    pipeline_run_stale_seconds: int = 1800
     llm_embedding_model: str = ""
     llm_embedding_dim: int = 1536
     admin_email: str = "admin@leadpro.com"

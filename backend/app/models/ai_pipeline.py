@@ -69,3 +69,18 @@ class PipelineBoard(Base):
     last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
     job_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PipelineRun(Base):
+    """One ingest run, manual (Refresh button) or scheduled. Used for the lock, cooldown and history."""
+
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(20), default="manual")  # manual | scheduled
+    status: Mapped[str] = mapped_column(String(20), default="running", index=True)  # running | success | failed
+    triggered_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    stats: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)

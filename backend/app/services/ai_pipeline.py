@@ -621,6 +621,7 @@ async def ingest_feed(
     fetch: FetchFn = fetch_feed,
     embed: EmbedFn = embed_texts,
     today: date | None = None,
+    boards: bool = True,
 ) -> int:
     today = today or date.today()
     if url is not None:
@@ -638,9 +639,10 @@ async def ingest_feed(
             today=today,
             default_source="Greenhouse",
         )
-    from app.pipeline.ingest import ingest_boards  # local import: pipeline modules import this file
+    if boards:
+        from app.pipeline.ingest import ingest_boards  # local import: pipeline modules import this file
 
-    inserted += (await ingest_boards(db, today=today, embed=embed)).inserted
+        inserted += (await ingest_boards(db, today=today, embed=embed)).inserted
     return inserted
 
 
@@ -964,8 +966,14 @@ def run_daily_ingest() -> int:
 async def _run_daily() -> int:
     from app.core.database import AsyncSessionLocal, engine
 
+    from app.pipeline.refresh import SCHEDULED, RefreshBlocked, execute_run, start_run
+
     try:
         async with AsyncSessionLocal() as db:
-            return await ingest_feed(db)
+            try:
+                run = await start_run(db, None, SCHEDULED)
+            except RefreshBlocked:
+                return 0  # a refresh is already running
+        return await execute_run(run.id, AsyncSessionLocal)
     finally:
         await engine.dispose()
