@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
+import { RefreshPipelineButton } from "@/components/RefreshPipelineButton";
 import { Badge, Button, Card, EmptyState, FormField, Input, Select, Spinner } from "@/components/ui";
 
 type PipelineJob = {
@@ -121,6 +122,8 @@ export default function AiPipelinePage() {
       .catch(() => setCountries(["Worldwide"]));
   }, [load]);
 
+  const reloadAfterRefresh = useCallback(() => load(applied, 1), [load, applied]);
+
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     load(draft, 1);
@@ -155,7 +158,8 @@ export default function AiPipelinePage() {
     <div className="space-y-6">
       <PageHeader
         title="AI Pipeline"
-        description="Jobs are loaded on a daily schedule. Filter the store, then accept a match into Leads. With an embedding model configured, the search box ranks by meaning; otherwise the list stays newest first."
+        description="Jobs are loaded daily, or on demand with Refresh Pipeline. Only remote jobs open to US candidates, posted in the last 60 days, are kept. Filter the store, then accept a match into Leads. With an embedding model configured, the search box ranks by meaning; otherwise the list stays newest first."
+        actions={<RefreshPipelineButton onFinished={reloadAfterRefresh} />}
       />
 
       <Card>
@@ -196,10 +200,10 @@ export default function AiPipelinePage() {
               value={draft.postedWithin}
               onChange={(event) => setDraft({ ...draft, postedWithin: event.target.value })}
             >
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="">Any time</option>
+              <option value="7">Last week</option>
+              <option value="14">Last 2 weeks</option>
+              <option value="30">Last month</option>
+              <option value="60">Last 2 months</option>
             </Select>
           </FormField>
           <div className="flex items-center gap-3 xl:justify-end">

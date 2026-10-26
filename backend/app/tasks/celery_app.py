@@ -34,4 +34,20 @@ def ingest_ai_pipeline_daily():
     return run_daily_ingest()
 
 
+@celery_app.task(name="app.pipeline.refresh_run")
+def refresh_pipeline_run(run_id: int):
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal, engine
+    from app.pipeline.refresh import execute_run
+
+    async def go() -> int:
+        try:
+            return await execute_run(run_id, AsyncSessionLocal)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(go())
+
+
 celery_app.autodiscover_tasks(["app.tasks"])
