@@ -13,3 +13,6 @@ backend/build/
 *.tsbuildinfo
 trust-policy.json
 /test/
+
+# Celery beat runtime state
+backend/celerybeat-schedule*

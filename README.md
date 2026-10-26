@@ -58,12 +58,12 @@ Four user roles reach one Next.js app, which calls the FastAPI backend. Celery w
 ## Quick Start (one command)
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # then edit .env: set DATABASE_URL password, JWT_SECRET and ADMIN_PASSWORD
 docker compose up -d postgres
 ./scripts/start.sh
 ```
 
-Then open **http://localhost:3000** and log in with `admin@leadpro.com` / `admin123`.
+Then open **http://localhost:3000** and log in as `admin@leadpro.com` with the `ADMIN_PASSWORD` you set in `.env`.
 
 > **Note:** Postgres runs on port **5433** (not 5432) to avoid conflicts with a local PostgreSQL install.
 
