@@ -14,6 +14,7 @@ import {
   Briefcase,
   FileText,
   FileSearch,
+  Sparkles,
   Shield,
   ChevronRight,
   Upload,
@@ -33,6 +34,7 @@ type NavItem = {
 const mainNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager", "bd", "engineer"] },
   { href: "/leads", label: "Leads", icon: Briefcase, roles: ["admin", "manager", "bd", "engineer"] },
+  { href: "/ai-pipeline", label: "AI Pipeline", icon: Sparkles, roles: ["admin", "manager", "bd"] },
   { href: "/monthly-targets", label: "Monthly Targets", icon: Target, roles: ["admin", "manager", "engineer"] },
   { href: "/profiles", label: "Profiles", icon: Users, roles: ["admin", "manager"] },
   {
