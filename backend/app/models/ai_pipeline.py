@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, ForeignKey, Integer, String, Text, TypeDecorator
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, TypeDecorator, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -43,3 +43,29 @@ class AiPipelineJob(Base):
     embedding: Mapped[list | None] = mapped_column(Embedding(), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=STATUS_NEW, index=True)
     lead_id: Mapped[int | None] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    # Board-sourced jobs. Feed-sourced rows leave these empty.
+    ats: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    board_id: Mapped[int | None] = mapped_column(ForeignKey("pipeline_boards.id"), nullable=True, index=True)
+    scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    missed_fetches: Mapped[int] = mapped_column(Integer, default=0)
+    closed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class PipelineBoard(Base):
+    """One company job board on a public ATS. Seeded from lead company names, then probed."""
+
+    __tablename__ = "pipeline_boards"
+    __table_args__ = (UniqueConstraint("ats", "slug", name="uq_pipeline_board_ats_slug"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ats: Mapped[str] = mapped_column(String(30), index=True)
+    slug: Mapped[str] = mapped_column(String(150))
+    company: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_complete_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+    job_count: Mapped[int] = mapped_column(Integer, default=0)

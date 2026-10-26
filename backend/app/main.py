@@ -34,6 +34,13 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
         await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS location VARCHAR(500) DEFAULT ''"))
         await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS countries JSON"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS ats VARCHAR(30)"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS external_id VARCHAR(100)"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS board_id INTEGER REFERENCES pipeline_boards(id)"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS scope VARCHAR(20)"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS missed_fetches INTEGER DEFAULT 0"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS closed_at DATE"))
     # Seeding is best-effort demo data — never let it crash startup.
     try:
         await seed_database()
