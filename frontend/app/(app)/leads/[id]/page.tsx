@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { LeadStatusEditor } from "@/components/LeadStatusEditor";
 import { LeadIssueReporter } from "@/components/LeadIssueReporter";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
+import { EngineerSuggestion, JobTechMatch, TechShare } from "@/components/JobTechMatch";
 import { ArrowLeft } from "lucide-react";
 
 export default function LeadDetailPage() {
@@ -16,6 +17,7 @@ export default function LeadDetailPage() {
   const [lead, setLead] = useState<Lead | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [match, setMatch] = useState<{ tech_stack: TechShare[]; suggested_engineers: EngineerSuggestion[] } | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -29,6 +31,13 @@ export default function LeadDetailPage() {
     if (stored) setUser(JSON.parse(stored));
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!user || !["admin", "manager", "bd"].includes(user.role)) return;
+    api<{ tech_stack: TechShare[]; suggested_engineers: EngineerSuggestion[] }>(`/ai-pipeline/leads/${id}`)
+      .then(setMatch)
+      .catch(() => setMatch(null));
+  }, [id, user]);
 
   const toggleJdInvite = async () => {
     await api(`/leads/${id}`, { method: "PATCH", body: JSON.stringify({ jd_invite_sent: !lead?.jd_invite_sent }) });
@@ -114,6 +123,8 @@ export default function LeadDetailPage() {
           </div>
         </Card>
       </div>
+
+      {match && <JobTechMatch techStack={match.tech_stack} engineers={match.suggested_engineers} />}
 
       {canUpdateStatus && (
         <Card>

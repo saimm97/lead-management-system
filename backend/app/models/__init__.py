@@ -3,6 +3,7 @@ from app.models.user import User, UserInvitation, AuditLog
 from app.models.lead import Lead, LeadStatusHistory, LeadStatusConfig
 from app.models.profile import Profile, MonthlyTarget
 from app.models.issue import Issue, IssueComment, ReportSnapshot
+from app.models.ai_pipeline import AiPipelineJob
 
 __all__ = [
     "Tenant",
@@ -17,4 +18,5 @@ __all__ = [
     "Issue",
     "IssueComment",
     "ReportSnapshot",
+    "AiPipelineJob",
 ]

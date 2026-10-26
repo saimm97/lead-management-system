@@ -5,12 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 
-from app.api.routes import admin, agents, auth, calendar, cv, issues, leads, reports, teams, users
+from app.api.routes import admin, agents, ai_pipeline, auth, calendar, cv, issues, leads, reports, teams, users
 from app.api.routes.profiles import profiles_router, targets_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import auth_token as auth_token_models  # noqa: F401
 from app.models import calendar as calendar_models  # noqa: F401
+from app.models import ai_pipeline as ai_pipeline_models  # noqa: F401
 from app.models import tenant  # noqa: F401
 from app.seed import seed_database
 
@@ -18,6 +19,7 @@ from app.seed import seed_database
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS devsinc_id VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
@@ -30,6 +32,8 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_number VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS interview_round VARCHAR(100)"))
         await conn.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS location VARCHAR(500) DEFAULT ''"))
+        await conn.execute(text("ALTER TABLE ai_pipeline_jobs ADD COLUMN IF NOT EXISTS countries JSON"))
     # Seeding is best-effort demo data — never let it crash startup.
     try:
         await seed_database()
@@ -67,6 +71,7 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
 app.include_router(cv.router, prefix="/api")
+app.include_router(ai_pipeline.router, prefix="/api")
 
 
 @app.get("/")

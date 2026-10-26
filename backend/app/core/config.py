@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # OpenAI-compatible endpoint. Zhipu GLM default; override LLM_BASE_URL/LLM_MODEL as needed.
     llm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
     llm_model: str = "glm-4.5"
+    # AI Pipeline. Empty feed URL skips the daily load. Empty embedding model
+    # still stores jobs; the page then sorts by newest instead of similarity.
+    job_feed_url: str = ""
+    # Public Greenhouse board tokens, fetched with the daily job feed.
+    greenhouse_boards: str = "stripe,gitlab,airbnb,cloudflare,figma,discord,databricks,robinhood"
+    llm_embedding_model: str = ""
+    llm_embedding_dim: int = 1536
     admin_email: str = "admin@leadpro.com"
     admin_password: str = "admin123"
     admin_name: str = "System Admin"

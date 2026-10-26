@@ -19,15 +19,51 @@ A full-stack lead management platform for BD executives, software engineers, man
 - **Admin:** User management, status config, audit log
 - **LLM Agents:** Stub interfaces for lead enrichment and status suggestions
 
+## Architecture
+
+Full write-up with module tables, permissions and improvement suggestions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · PDF copy: [docs/architecture.pdf](docs/architecture.pdf)
+
+### System context
+
+Four user roles reach one Next.js app, which calls the FastAPI backend. Celery with Redis runs scheduled reports and the daily AI job ingest.
+
+![System context](docs/diagrams/01-system-context.png)
+
+### Backend layers
+
+![Backend layers](docs/diagrams/02-backend-layers.png)
+
+### Frontend
+
+![Frontend](docs/diagrams/03-frontend.png)
+
+### Data model
+
+![Data model: core](docs/diagrams/04-data-model-core.png)
+
+![Data model: accounts and lookups](docs/diagrams/05-data-model-accounts.png)
+
+### Request flow: changing a lead's status
+
+![Request flow](docs/diagrams/06-request-flow.png)
+
+### AI pipeline
+
+![AI pipeline](docs/diagrams/07-ai-pipeline.png)
+
+### Deployment
+
+![Deployment](docs/diagrams/08-deployment.png)
+
 ## Quick Start (one command)
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # then edit .env: set DATABASE_URL password, JWT_SECRET and ADMIN_PASSWORD
 docker compose up -d postgres
 ./scripts/start.sh
 ```
 
-Then open **http://localhost:3000** and log in with `admin@leadpro.com` / `admin123`.
+Then open **http://localhost:3000** and log in as `admin@leadpro.com` with the `ADMIN_PASSWORD` you set in `.env`.
 
 > **Note:** Postgres runs on port **5433** (not 5432) to avoid conflicts with a local PostgreSQL install.
 
