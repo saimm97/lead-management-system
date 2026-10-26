@@ -74,7 +74,7 @@ ROUTES -->|"Depends"| DEPS["api/deps.py<br/>get_current_user: access-token JWT,<
 ROUTES --> SCH["schemas/<br/>Pydantic request + response"]
 ROUTES --> SVC["services<br/>users, tenant, rbac, audit, bulk_update, import_excel<br/>email, google_calendar, cv_ats, ai_pipeline"]
 ROUTES -->|"inline queries, e.g. leads.py"| ORM
-SVC --> ORM["models/<br/>SQLAlchemy ORM, 18 tables"]
+SVC --> ORM["models/<br/>SQLAlchemy ORM, 19 tables"]
 ORM --> DB[("PostgreSQL")]
 CORE["core<br/>config (.env), database (async engine),<br/>security (hash + JWT), enums"] -.->|"used by every layer"| SVC
 AG["agents/base.py<br/>enrichment + status stubs"] --> ROUTES
@@ -99,7 +99,7 @@ Each feature is a slice: a route file, a schema file and usually a model, with s
 |---|---|---|
 | Auth and onboarding | `routes/auth.py`, `routes/users.py` | Login, refresh, self-register with email confirm or admin approval, invites, forgot and reset password |
 | Leads | `routes/leads.py`, `models/lead.py` | CRUD, multi-field search, status change with history, CSV export, dropdown options, status config |
-| AI Pipeline | `routes/ai_pipeline.py`, `services/ai_pipeline.py` | Daily job ingest, filtering and ranking, tech share, engineer suggestions, accept a job as a lead |
+| AI Pipeline | `routes/ai_pipeline.py`, `services/ai_pipeline.py`, `pipeline/` | Daily job ingest from feeds and company boards (Greenhouse, Lever, Ashby), US-remote eligibility, closing of vanished jobs, filtering and ranking, tech share, engineer suggestions, accept a job as a lead |
 | Profiles and targets | `routes/profiles.py`, `models/profile.py` | Candidate registry and monthly engineer quotas |
 | Issues | `routes/issues.py`, `models/issue.py` | Log, triage, comment, bulk update |
 | Reports | `routes/reports.py`, `tasks/reports.py` | Dashboard, weekly, monthly, per-BD daily, engineer funnel, scheduled email |
@@ -141,7 +141,7 @@ class BACK ext
 
 ## 5. Data model
 
-Relationships follow the foreign keys in `backend/app/models`, 18 tables in all. Where one table points at `users` several times, the line lists each column.
+Relationships follow the foreign keys in `backend/app/models`, 19 tables in all. Where one table points at `users` several times, the line lists each column.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'Arial, Helvetica, sans-serif','fontSize':'14px','primaryColor':'#EAF1FB','primaryBorderColor':'#2F5D9E','primaryTextColor':'#0F1F33','secondaryColor':'#F3F5F8','tertiaryColor':'#F7F9FC','lineColor':'#5B6B7F','textColor':'#0F1F33','clusterBkg':'#F6F8FB','clusterBorder':'#C3CDDA','edgeLabelBackground':'#FFFFFF','actorBkg':'#EAF1FB','actorBorder':'#2F5D9E','actorTextColor':'#0F1F33','actorLineColor':'#9AA8BA','signalColor':'#3B4A5E','signalTextColor':'#0F1F33','labelBoxBkgColor':'#EAF1FB','labelBoxBorderColor':'#2F5D9E','noteBkgColor':'#F3F5F8','noteBorderColor':'#9AA8BA','activationBkgColor':'#DCE7F7','sequenceNumberColor':'#FFFFFF','attributeBackgroundColorOdd':'#F6F8FB','attributeBackgroundColorEven':'#FFFFFF'},'flowchart':{'curve':'basis','padding':12}}}%%
@@ -156,6 +156,7 @@ PROFILE |o--o{ LEAD : "profile_id"
 LEAD ||--o{ LEAD_STATUS_HISTORY : "lead_id"
 USER ||--o{ LEAD_STATUS_HISTORY : "changed_by"
 LEAD |o--o{ AI_PIPELINE_JOB : "lead_id"
+PIPELINE_BOARD |o--o{ AI_PIPELINE_JOB : "board_id"
 LEAD |o--o{ CALENDAR_INVITE : "related_lead_id"
 USER ||--o{ CALENDAR_INVITE : "organizer, attendee"
 USER ||--o{ MONTHLY_TARGET : "engineer, created_by"
@@ -218,7 +219,7 @@ A 401 anywhere makes `lib/api.ts` clear the stored tokens and send the browser t
 
 ## 7. AI pipeline
 
-A daily job feeds `ai_pipeline_jobs`. People browse and rank those jobs, and accepting one creates a lead.
+A daily job feeds `ai_pipeline_jobs` from the feed URL and from company boards on Greenhouse, Lever and Ashby. Board jobs are kept only if the title is technical, the posting is at most 60 days old, and the role is remote and open to US candidates (US, US or Canada, worldwide, or a European posting that names the US). A job missing from two complete fetches of its board is closed; a failed or partial fetch never closes anything. People browse and rank the jobs, and accepting one creates a lead.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'Arial, Helvetica, sans-serif','fontSize':'14px','primaryColor':'#EAF1FB','primaryBorderColor':'#2F5D9E','primaryTextColor':'#0F1F33','secondaryColor':'#F3F5F8','tertiaryColor':'#F7F9FC','lineColor':'#5B6B7F','textColor':'#0F1F33','clusterBkg':'#F6F8FB','clusterBorder':'#C3CDDA','edgeLabelBackground':'#FFFFFF','actorBkg':'#EAF1FB','actorBorder':'#2F5D9E','actorTextColor':'#0F1F33','actorLineColor':'#9AA8BA','signalColor':'#3B4A5E','signalTextColor':'#0F1F33','labelBoxBkgColor':'#EAF1FB','labelBoxBorderColor':'#2F5D9E','noteBkgColor':'#F3F5F8','noteBorderColor':'#9AA8BA','activationBkgColor':'#DCE7F7','sequenceNumberColor':'#FFFFFF','attributeBackgroundColorOdd':'#F6F8FB','attributeBackgroundColorEven':'#FFFFFF'},'flowchart':{'curve':'basis','padding':12}}}%%
@@ -226,12 +227,19 @@ flowchart TB
 BEAT["Celery beat<br/>daily 06:00 UTC"] --> ING["ingest_daily<br/>run_daily_ingest"]
 f1["JOB_FEED_URL<br/>(skipped when empty)"] --> FETCH
 f2["Greenhouse boards<br/>GREENHOUSE_BOARDS list"] --> FETCH
+PROBE["python -m app.pipeline.probe<br/>company names from leads,<br/>public endpoints only"] --> BOARDS[("pipeline_boards")]
 ING --> FETCH["fetch_feed (httpx)"]
+ING --> BF["ingest_boards<br/>Greenhouse, Lever, Ashby adapters"]
+BOARDS --> BF
 FETCH --> CLEAN["parse_feed, clean_job,<br/>technical-role filter,<br/>drop URLs already stored"]
+BF --> ELIG["accept_job<br/>technical title, 60-day age cap,<br/>US-remote eligibility"]
 CLEAN --> EMB{"embeddings enabled?<br/>LLM_EMBEDDING_MODEL + key"}
+ELIG --> EMB
 EMB -->|"yes"| VEC["embed_texts<br/>LLM_BASE_URL /embeddings"]
 EMB -->|"no"| STORE
 VEC --> STORE[("ai_pipeline_jobs")]
+BF -->|"complete fetch only"| CLOSE["jobs missing twice<br/>get closed_at and drop out of lists"]
+CLOSE --> STORE
 STORE --> LIST["GET /ai-pipeline<br/>filters, hybrid rank:<br/>keyword overlap + cosine"]
 LIST --> UI["ai-pipeline pages<br/>JobTechMatch"]
 UI -->|"accept"| ACC["accept_job"]
@@ -243,13 +251,13 @@ classDef store fill:#E1F2EF,stroke:#1B7F73,stroke-width:1.5px,color:#0F1F33
 classDef ext fill:#F1F3F6,stroke:#8794A5,stroke-dasharray:4 3,color:#2B394B
 classDef actor fill:#1F3A5F,stroke:#1F3A5F,color:#FFFFFF
 classDef warn fill:#FDECEA,stroke:#B3261E,stroke-dasharray:4 3,color:#7A1B15
-class ING,FETCH,CLEAN,VEC,LIST,UI,ACC layer
-class BEAT aux
+class ING,FETCH,CLEAN,VEC,LIST,UI,ACC,BF,ELIG,CLOSE layer
+class BEAT,PROBE aux
 class f1,f2 ext
-class STORE,LEAD store
+class STORE,LEAD,BOARDS store
 ```
 
-Without an embedding model the jobs are still stored and the page sorts by newest. The ai-pipeline routes allow Admin, Manager and BD.
+Seed the board list once with `python -m app.pipeline.probe`. Without an embedding model the jobs are still stored and the page sorts by newest. The ai-pipeline routes allow Admin, Manager and BD.
 
 ## 8. Roles and permissions
 

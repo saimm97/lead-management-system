@@ -51,6 +51,12 @@ Four user roles reach one Next.js app, which calls the FastAPI backend. Celery w
 
 ![AI pipeline](docs/diagrams/07-ai-pipeline.png)
 
+Besides the feed URL, the pipeline reads company boards on Greenhouse, Lever and Ashby. It keeps technical, remote, US-eligible jobs from the last 60 days, and closes a job after two complete fetches that no longer list it. Seed the board list once on a machine with internet access:
+
+```bash
+cd backend && python -m app.pipeline.probe
+```
+
 ### Deployment
 
 ![Deployment](docs/diagrams/08-deployment.png)
